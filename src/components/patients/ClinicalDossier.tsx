@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Clock,
   RotateCcw,
@@ -12,6 +12,10 @@ import {
   FileWarning,
   History,
   X,
+  ClipboardList,
+  TrendingUp,
+  AlertTriangle,
+  FileText,
 } from 'lucide-react';
 import {
   getConditionColor,
@@ -44,6 +48,8 @@ interface ClinicalDossierProps {
   onGoToReports: () => void;
 }
 
+type HistoryFilterTab = 'ALL' | 'Actividad' | 'Evolución' | 'Regresión' | 'Enmienda';
+
 export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
   student,
   currentRole,
@@ -64,7 +70,7 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
     date: string;
     amendsEntryId: string;
   }>({
-    type: 'Evolución',
+    type: 'Actividad',
     title: '',
     content: '',
     date: new Date().toISOString().split('T')[0],
@@ -72,6 +78,13 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [showAttendanceLog, setShowAttendanceLog] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilterTab>('ALL');
+
+  const filteredHistory = useMemo(() => {
+    if (!student) return [];
+    if (historyFilter === 'ALL') return student.history;
+    return student.history.filter((h) => h.type === historyFilter);
+  }, [student, historyFilter]);
 
   if (!student) {
     return (
@@ -80,7 +93,7 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
         <p className="font-medium text-slate-600">Selecciona un paciente de la lista</p>
         <p className="text-xs text-slate-400 mt-1">
           {canViewClinical
-            ? 'Podrás consultar su diagnóstico, sus turnos semanales, registrar evoluciones inmutables y generar informes de IA.'
+            ? 'Podrás consultar su diagnóstico, sus actividades individuales, su historial clínico y generar informes de IA.'
             : 'Podrás gestionar sus turnos semanales asignados, datos de contacto del tutor e inasistencias.'}
         </p>
       </div>
@@ -88,6 +101,9 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
   }
 
   const assignedSlots = getStudentSlots(student);
+  const activitiesCount = student.history.filter((h) => h.type === 'Actividad').length;
+  const evolutionsCount = student.history.filter((h) => h.type === 'Evolución').length;
+  const regressionsCount = student.history.filter((h) => h.type === 'Regresión').length;
 
   const handleSubmitEntry = (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,7 +124,7 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
 
     onAddClinicalEntry(student.id, parsed.data);
     setNewEntry({
-      type: 'Evolución',
+      type: newEntry.type,
       title: '',
       content: '',
       date: new Date().toISOString().split('T')[0],
@@ -176,9 +192,6 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
                       <strong>
                         {sl.day} {sl.hour} hs
                       </strong>
-                      {sl.professionalName && (
-                        <span className="text-teal-700">({sl.professionalName})</span>
-                      )}
                       <button
                         type="button"
                         onClick={() => onRemoveSlot(student.id, sl.day, sl.hour)}
@@ -263,7 +276,7 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
                 </button>
               )}
 
-              {currentRole === 'admin' && !student.archivedAt && (
+              {canViewClinical && !student.archivedAt && (
                 <button
                   onClick={handleRequestArchive}
                   className="flex items-center gap-1 p-1.5 text-xs text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg border border-transparent hover:border-amber-200 cursor-pointer"
@@ -311,26 +324,63 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
               <Lock className="w-7 h-7" />
             </div>
             <h3 className="text-sm font-bold text-slate-800">
-              Historia Clínica Restringida por Rol (Ley 25.326 / Ley 26.529)
+              Historia Clínica y Actividades Restringidas por Rol (Ley 25.326 / Ley 26.529)
             </h3>
             <p className="text-xs text-slate-500 max-w-md mt-1">
               El perfil de <strong>Recepción</strong> solo tiene acceso a datos administrativos,
-              asignación de múltiples turnos semanales y control de asistencia. El diagnóstico y
-              las evoluciones clínicas están reservados a los profesionales.
+              asignación de múltiples turnos semanales y control de asistencia. El diagnóstico,
+              las actividades individuales y las evoluciones clínicas son de acceso exclusivo del
+              profesional titular.
             </p>
           </div>
         ) : (
           <>
-            {/* FORMULARIO APPEND-ONLY DE HISTORIA CLÍNICA */}
+            {/* FORMULARIO PARA CARGAR ACTIVIDAD INDIVIDUAL, EVOLUCIÓN O REGRESIÓN */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center space-x-1">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
                   <Plus className="w-4 h-4 text-teal-600" />
-                  <span>Registrar Nuevo Asiento Clínico Inmutable (Ley 26.529)</span>
+                  <span>
+                    Cargar Actividad Individual / Evolución en Historia Clínica
+                  </span>
                 </h4>
-                <span className="text-[11px] text-slate-500">
-                  Firmante: <strong>{currentUserName}</strong>
-                </span>
+
+                {/* Botones rápidos para elegir tipo de carga */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setNewEntry((prev) => ({ ...prev, type: 'Actividad' }))}
+                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                      newEntry.type === 'Actividad'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    + Actividad Individual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewEntry((prev) => ({ ...prev, type: 'Evolución' }))}
+                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                      newEntry.type === 'Evolución'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    + Evolución
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewEntry((prev) => ({ ...prev, type: 'Regresión' }))}
+                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                      newEntry.type === 'Regresión'
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    + Regresión
+                  </button>
+                </div>
               </div>
 
               {formError && (
@@ -344,7 +394,7 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Fecha de Sesión
+                      Fecha de la Sesión
                     </label>
                     <input
                       type="date"
@@ -357,7 +407,7 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
 
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Tipo de Registro
+                      Categoría del Registro
                     </label>
                     <select
                       value={newEntry.type}
@@ -367,22 +417,26 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
                           type: e.target.value as ClinicalEntryType,
                         })
                       }
-                      className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                      className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-semibold"
                     >
-                      <option value="Evolución">Evolución / Avance</option>
-                      <option value="Actividad">Actividad / Ejercicio</option>
-                      <option value="Regresión">Regresión / Dificultad</option>
-                      <option value="Enmienda">Enmienda / Fe de Erratas (Ley 26.529)</option>
+                      <option value="Actividad">Actividad Individual / Ejercicio</option>
+                      <option value="Evolución">Evolución / Avance Clínico</option>
+                      <option value="Regresión">Regresión / Dificultad Observada</option>
+                      <option value="Enmienda">Enmienda / Nota Aclaratoria (Ley 26.529)</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Título Resumido
+                      Título de la {newEntry.type}
                     </label>
                     <input
                       type="text"
-                      placeholder="Ej: Juego simbólico compartido"
+                      placeholder={
+                        newEntry.type === 'Actividad'
+                          ? 'Ej: Motricidad fina con bloques'
+                          : 'Ej: Avance en atención conjunta'
+                      }
                       value={newEntry.title}
                       onChange={(e) => setNewEntry({ ...newEntry, title: e.target.value })}
                       className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
@@ -415,11 +469,11 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
 
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">
-                    Observaciones / Notas Detalladas
+                    Descripción Detallada de la {newEntry.type}
                   </label>
                   <textarea
                     rows={2}
-                    placeholder="Describe la conducta, materiales utilizados, nivel de apoyo y resultados..."
+                    placeholder="Detalle los ejercicios realizados, materiales utilizados, respuesta del paciente y observaciones clínicas..."
                     value={newEntry.content}
                     onChange={(e) => setNewEntry({ ...newEntry, content: e.target.value })}
                     className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 resize-none"
@@ -427,38 +481,91 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
                   ></textarea>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="text-[11px] text-slate-400">
-                    Los asientos firmados son inalterables. Si requiere corregir un dato posterior,
-                    utilice el tipo &quot;Enmienda&quot;.
+                    Profesional firmante: <strong>{currentUserName}</strong>
                   </span>
                   <button
                     type="submit"
-                    className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center space-x-1 cursor-pointer"
+                    className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center space-x-1.5 cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>Firmar y Guardar</span>
+                    <span>Guardar {newEntry.type}</span>
                   </button>
                 </div>
               </form>
             </div>
 
-            {/* LISTADO CRONOLÓGICO DE HISTORIA CLÍNICA */}
+            {/* PESTAÑAS DE FILTRO: HISTORIAL COMPLETO vs ACTIVIDADES INDIVIDUALES vs EVOLUCIONES */}
             <div className="flex-1 flex flex-col space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center justify-between">
-                <span>Historial Clínico Terapéutico</span>
-                <span className="text-slate-400 font-normal">
-                  ({student.history.length} asientos inmutables)
-                </span>
-              </h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-teal-600" />
+                  <span>Historia Clínica y Actividades de {student.name}</span>
+                </h4>
 
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[350px]">
-                {student.history.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 text-xs">
-                    No hay entradas registradas en el historial.
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      historyFilter === 'ALL'
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Todo ({student.history.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setHistoryFilter('Actividad')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer ${
+                      historyFilter === 'Actividad'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100'
+                    }`}
+                  >
+                    <ClipboardList className="w-3.5 h-3.5" />
+                    <span>Actividades ({activitiesCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setHistoryFilter('Evolución')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer ${
+                      historyFilter === 'Evolución'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                    }`}
+                  >
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>Evoluciones ({evolutionsCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setHistoryFilter('Regresión')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer ${
+                      historyFilter === 'Regresión'
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-rose-50 text-rose-800 hover:bg-rose-100'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Regresiones ({regressionsCount})</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[380px]">
+                {filteredHistory.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    No hay registros en la categoría seleccionada. Usá el formulario de arriba
+                    para cargar una nueva {historyFilter === 'ALL' ? 'entrada' : historyFilter}.
                   </div>
                 ) : (
-                  student.history.map((item) => (
+                  filteredHistory.map((item) => (
                     <div
                       key={item.id}
                       className={`p-3.5 rounded-lg border transition-all ${
@@ -466,9 +573,9 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
                           ? 'bg-emerald-50/50 border-emerald-200'
                           : item.type === 'Regresión'
                             ? 'bg-rose-50/50 border-rose-200'
-                            : item.type === 'Enmienda'
-                              ? 'bg-amber-50/60 border-amber-300'
-                              : 'bg-slate-50 border-slate-200'
+                            : item.type === 'Actividad'
+                              ? 'bg-indigo-50/40 border-indigo-200'
+                              : 'bg-amber-50/60 border-amber-300'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
@@ -479,12 +586,12 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
                                 ? 'bg-emerald-100 text-emerald-800'
                                 : item.type === 'Regresión'
                                   ? 'bg-rose-100 text-rose-800'
-                                  : item.type === 'Enmienda'
-                                    ? 'bg-amber-200 text-amber-900'
-                                    : 'bg-slate-200 text-slate-800'
+                                  : item.type === 'Actividad'
+                                    ? 'bg-indigo-100 text-indigo-800'
+                                    : 'bg-amber-200 text-amber-900'
                             }`}
                           >
-                            {item.type}
+                            {item.type === 'Actividad' ? 'Actividad Individual' : item.type}
                           </span>
                           <span className="font-bold text-sm text-slate-900">
                             {item.title}

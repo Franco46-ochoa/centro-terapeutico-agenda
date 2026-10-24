@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Activity,
   Calendar,
-  User,
+  FileText,
   Sparkles,
   Settings,
   UserPlus,
@@ -133,7 +133,12 @@ export const Header: React.FC<HeaderProps> = ({
                   : 'hover:bg-slate-800 text-slate-300'
               }`}
             >
-              <User className="w-4 h-4" /> Pacientes
+              <FileText className="w-4 h-4" />
+              <span>
+                {canViewClinical
+                  ? 'Pacientes / Historia Clínica'
+                  : 'Pacientes y Turnos'}
+              </span>
               <span className="bg-teal-800 text-teal-200 text-xs px-1.5 py-0.5 rounded-full font-bold">
                 {activeStudentsCount}
               </span>

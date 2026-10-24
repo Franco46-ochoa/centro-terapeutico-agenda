@@ -270,7 +270,9 @@ export default function App() {
     if (user.role === 'admin') {
       return students;
     }
-    return students.filter((s) => s.professionalId === activeWorkspaceId);
+    return students.filter(
+      (s) => !s.professionalId || s.professionalId === activeWorkspaceId
+    );
   }, [students, user, activeWorkspaceId]);
 
   const activeStudents = useMemo(
@@ -278,9 +280,22 @@ export default function App() {
     [workspaceStudents]
   );
 
+  // Seleccionar automáticamente el primer paciente del profesional si no hay ninguno seleccionado
+  useEffect(() => {
+    if (activeStudents.length === 0) return;
+    const existsInWorkspace = activeStudents.some(
+      (s) => s.id === selectedStudentId
+    );
+    if (!existsInWorkspace) {
+      setSelectedStudentId(activeStudents[0].id);
+    }
+  }, [activeStudents, selectedStudentId]);
+
   const selectedStudent = useMemo(
-    () => workspaceStudents.find((s) => s.id === selectedStudentId),
-    [workspaceStudents, selectedStudentId]
+    () =>
+      workspaceStudents.find((s) => s.id === selectedStudentId) ??
+      activeStudents[0],
+    [workspaceStudents, activeStudents, selectedStudentId]
   );
 
   const criticalStudents = useMemo(
