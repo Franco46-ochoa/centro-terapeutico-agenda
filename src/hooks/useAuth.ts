@@ -17,15 +17,11 @@ export interface StaffMember {
 
 export interface SessionUser {
   id: string;
+  rawName: string;
+  specialtyOrLicense: string;
   fullName: string;
   role: AppRole;
   mfaVerified: boolean;
-  /**
-   * ID del profesional dueño de la agenda/consultorio:
-   * - Si inicia sesión un 'profesional', es su propio id.
-   * - Si inicia sesión una 'recepcion', es el linkedProfessionalId del profesional al que asiste.
-   * - Si inicia sesión un 'admin', puede inspeccionar o gestionar usuarios.
-   */
   workspaceOwnerId: string;
   workspaceOwnerName: string;
 }
@@ -55,7 +51,7 @@ export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
   },
   {
     id: 'staff_admin_1',
-    fullName: 'Administrador de Usuarios',
+    fullName: 'Administrador',
     specialtyOrLicense: 'Gestión Comercial y Suscripciones',
     role: 'admin',
     password: 'admin2026',
@@ -64,7 +60,7 @@ export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
   },
   {
     id: 'staff_recep_1',
-    fullName: 'Sofía Pereyra (Secretaria)',
+    fullName: 'Sofía Pereyra',
     specialtyOrLicense: 'Recepción vinculada a Lic. Valeria Méndez',
     role: 'recepcion',
     password: 'recep2026',
@@ -76,6 +72,24 @@ export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
 ];
 
 const STAFF_STORAGE_KEY = 'ct_staff_members_v2';
+const REMEMBERED_NAME_KEY = 'ct_remembered_username_v2';
+const REMEMBERED_SESSION_STAFF_ID_KEY = 'ct_remembered_session_id_v2';
+
+/**
+ * Normaliza un nombre quitando tildes, puntos, prefijos profesionales ("lic.", "dr.", "dra.")
+ * y espacios múltiples para que el usuario pueda escribir tanto "Valeria Mendez"
+ * como "Lic. Valeria Méndez".
+ */
+function normalizePersonName(input: string): string {
+  return input
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b(lic|licenciado|licenciada|dr|dra|doctor|doctora|prof)\.?\s*/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function loadStaffMembers(): StaffMember[] {
   try {
@@ -102,32 +116,130 @@ function saveStaffMembers(list: StaffMember[]) {
   }
 }
 
+function buildSessionFromMember(
+  found: StaffMember,
+  allMembers: StaffMember[]
+): SessionUser {
+  const ownerProf =
+    found.role === 'recepcion'
+      ? allMembers.find((p) => p.id === found.linkedProfessionalId)
+      : found;
+
+  const workspaceOwnerId =
+    found.role === 'recepcion'
+      ? found.linkedProfessionalId || 'staff_profe_1'
+      : found.id;
+
+  const workspaceOwnerName =
+    found.role === 'recepcion'
+      ? ownerProf?.fullName || found.linkedProfessionalName || 'Profesional Titular'
+      : found.fullName;
+
+  const displayLabel = found.specialtyOrLicense
+    ? `${found.fullName} (${found.specialtyOrLicense})`
+    : found.fullName;
+
+  return {
+    id: found.id,
+    rawName: found.fullName,
+    specialtyOrLicense: found.specialtyOrLicense,
+    fullName: displayLabel,
+    role: found.role,
+    mfaVerified: found.role !== 'recepcion',
+    workspaceOwnerId,
+    workspaceOwnerName,
+  };
+}
+
 export function useAuth() {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [isLocked, setIsLocked] = useState<boolean>(false);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>(() =>
     loadStaffMembers()
   );
 
-  const loginWithStaffPassword = useCallback(
-    (staffId: string, passwordInput: string): LoginResult => {
-      const found = staffMembers.find((s) => s.id === staffId && s.active);
+  const [rememberedUserName, setRememberedUserName] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(REMEMBERED_NAME_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+
+  // Si el usuario dejó marcada la opción "Recordar mi sesión en este equipo", restaurarla
+  const [user, setUser] = useState<SessionUser | null>(() => {
+    try {
+      const savedStaffId = window.localStorage.getItem(REMEMBERED_SESSION_STAFF_ID_KEY);
+      if (!savedStaffId) return null;
+      const members = loadStaffMembers();
+      const found = members.find((m) => m.id === savedStaffId && m.active);
+      if (!found || found.subscriptionStatus === 'pausada') return null;
+      if (found.role === 'recepcion') {
+        const owner = members.find((p) => p.id === found.linkedProfessionalId);
+        if (owner && owner.subscriptionStatus === 'pausada') return null;
+      }
+      return buildSessionFromMember(found, members);
+    } catch {
+      return null;
+    }
+  });
+
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+
+  const loginByNameAndPassword = useCallback(
+    (
+      userNameInput: string,
+      passwordInput: string,
+      rememberMe: boolean
+    ): LoginResult => {
+      const cleanInput = normalizePersonName(userNameInput);
+      const rawTrimmed = userNameInput.trim().toLowerCase();
+
+      if (!cleanInput) {
+        return {
+          ok: false,
+          reason: 'invalid_credentials',
+          message: 'Por favor ingrese su Nombre y Apellido.',
+        };
+      }
+
+      // Buscar usuario por coincidencia de nombre normalizado o coincidencia con "admin"/"administrador"
+      const matchingMembers = staffMembers.filter((m) => {
+        if (!m.active) return false;
+        const normalizedMember = normalizePersonName(m.fullName);
+        if (normalizedMember === cleanInput || m.fullName.toLowerCase() === rawTrimmed) {
+          return true;
+        }
+        if (
+          m.role === 'admin' &&
+          (rawTrimmed === 'admin' ||
+            rawTrimmed === 'administrador' ||
+            rawTrimmed === 'administrador de usuarios')
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      // Si hay coincidencia de nombre, verificar la contraseña
+      const found =
+        matchingMembers.find((m) => m.password === passwordInput) ??
+        matchingMembers[0];
+
       if (!found || found.password !== passwordInput) {
         return {
           ok: false,
           reason: 'invalid_credentials',
           message:
-            'Contraseña incorrecta para el usuario seleccionado. Verifique su clave asignada.',
+            'Usuario o contraseña incorrectos. Verifique su Nombre y Apellido y su clave.',
         };
       }
 
-      // Verificar estado de suscripción del profesional (o del profesional vinculado si es recepcionista)
+      // Verificar estado de suscripción
       if (found.role === 'profesional' && found.subscriptionStatus === 'pausada') {
         return {
           ok: false,
           reason: 'subscription_paused',
           message:
-            'Su suscripción mensual se encuentra pausada o pendiente de renovación. Contacte al Administrador de Usuarios para reactivar su agenda.',
+            'Su suscripción mensual se encuentra pausada o pendiente de renovación. Contacte al Administrador para reactivar su agenda.',
         };
       }
 
@@ -143,38 +255,26 @@ export function useAuth() {
             ok: false,
             reason: 'subscription_paused',
             message:
-              'La suscripción del profesional titular se encuentra pausada. Contacte al Administrador de Usuarios.',
+              'La suscripción del profesional titular se encuentra pausada. Contacte al Administrador.',
           };
         }
       }
 
-      const ownerProf =
-        found.role === 'recepcion'
-          ? staffMembers.find((p) => p.id === found.linkedProfessionalId)
-          : found;
+      try {
+        if (rememberMe) {
+          window.localStorage.setItem(REMEMBERED_NAME_KEY, found.fullName);
+          window.localStorage.setItem(REMEMBERED_SESSION_STAFF_ID_KEY, found.id);
+          setRememberedUserName(found.fullName);
+        } else {
+          window.localStorage.removeItem(REMEMBERED_NAME_KEY);
+          window.localStorage.removeItem(REMEMBERED_SESSION_STAFF_ID_KEY);
+          setRememberedUserName('');
+        }
+      } catch {
+        // Ignorar errores de almacenamiento
+      }
 
-      const workspaceOwnerId =
-        found.role === 'recepcion'
-          ? found.linkedProfessionalId || 'staff_profe_1'
-          : found.id;
-
-      const workspaceOwnerName =
-        found.role === 'recepcion'
-          ? ownerProf?.fullName || found.linkedProfessionalName || 'Profesional Titular'
-          : found.fullName;
-
-      const displayLabel = found.specialtyOrLicense
-        ? `${found.fullName} (${found.specialtyOrLicense})`
-        : found.fullName;
-
-      setUser({
-        id: found.id,
-        fullName: displayLabel,
-        role: found.role,
-        mfaVerified: found.role !== 'recepcion',
-        workspaceOwnerId,
-        workspaceOwnerName,
-      });
+      setUser(buildSessionFromMember(found, staffMembers));
       setIsLocked(false);
       return { ok: true, member: found };
     },
@@ -182,6 +282,11 @@ export function useAuth() {
   );
 
   const logout = useCallback(() => {
+    try {
+      window.localStorage.removeItem(REMEMBERED_SESSION_STAFF_ID_KEY);
+    } catch {
+      // Ignorar
+    }
     setUser(null);
     setIsLocked(false);
   }, []);
@@ -201,6 +306,82 @@ export function useAuth() {
         return true;
       }
       return false;
+    },
+    [user, staffMembers]
+  );
+
+  /**
+   * Permite que el propio usuario autenticado cambie su Nombre y Apellido,
+   * su Especialidad/Matrícula y/o su propia Contraseña desde su Cuenta Personal.
+   */
+  const updateOwnProfile = useCallback(
+    (changes: {
+      fullName: string;
+      specialtyOrLicense: string;
+      newPassword?: string;
+    }): { ok: boolean; message: string } => {
+      if (!user) {
+        return { ok: false, message: 'No hay sesión activa.' };
+      }
+
+      const trimmedName = changes.fullName.trim();
+      const trimmedSpec = changes.specialtyOrLicense.trim();
+      const trimmedPass = changes.newPassword?.trim();
+
+      if (trimmedName.length < 2) {
+        return {
+          ok: false,
+          message: 'El Nombre y Apellido debe tener al menos 2 caracteres.',
+        };
+      }
+
+      if (trimmedPass && trimmedPass.length < 4) {
+        return {
+          ok: false,
+          message: 'La nueva contraseña debe tener al menos 4 caracteres.',
+        };
+      }
+
+      let updatedMember: StaffMember | null = null;
+      const nextList = staffMembers.map((m) => {
+        if (m.id === user.id) {
+          updatedMember = {
+            ...m,
+            fullName: trimmedName,
+            specialtyOrLicense: trimmedSpec || m.specialtyOrLicense,
+            password: trimmedPass ? trimmedPass : m.password,
+          };
+          return updatedMember;
+        }
+        // Si un profesional cambió su nombre, actualizar la referencia en sus recepcionistas vinculadas
+        if (m.linkedProfessionalId === user.id) {
+          return {
+            ...m,
+            linkedProfessionalName: trimmedName,
+            specialtyOrLicense: `Recepción vinculada a ${trimmedName}`,
+          };
+        }
+        return m;
+      });
+
+      saveStaffMembers(nextList);
+      setStaffMembers(nextList);
+
+      try {
+        window.localStorage.setItem(REMEMBERED_NAME_KEY, trimmedName);
+        setRememberedUserName(trimmedName);
+      } catch {
+        // Ignorar
+      }
+
+      if (updatedMember) {
+        setUser(buildSessionFromMember(updatedMember, nextList));
+      }
+
+      return {
+        ok: true,
+        message: 'Sus datos personales y contraseña se actualizaron correctamente.',
+      };
     },
     [user, staffMembers]
   );
@@ -310,7 +491,9 @@ export function useAuth() {
     user,
     isLocked,
     staffMembers,
-    loginWithStaffPassword,
+    rememberedUserName,
+    loginByNameAndPassword,
+    updateOwnProfile,
     logout,
     lockSession,
     unlockSession,

@@ -74,7 +74,9 @@ export default function App() {
     user,
     isLocked,
     staffMembers,
-    loginWithStaffPassword,
+    rememberedUserName,
+    loginByNameAndPassword,
+    updateOwnProfile,
     logout,
     lockSession,
     unlockSession,
@@ -97,9 +99,6 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
 
-  // El ID del consultorio activo:
-  // - Para un Profesional es su propio ID.
-  // - Para una Recepcionista es el ID del Profesional al que fue vinculada.
   const activeWorkspaceId = user?.workspaceOwnerId || 'staff_profe_1';
   const activeWorkspaceName = user?.workspaceOwnerName || 'Mi Consultorio';
 
@@ -126,7 +125,6 @@ export default function App() {
     }
   }, [schedulesByProf]);
 
-  // Sincronización instantánea entre ventanas/pestañas (ej. Profesional y su Recepcionista vinculada)
   useEffect(() => {
     const handleStorageSync = (e: StorageEvent) => {
       if (e.key === STUDENTS_STORAGE_KEY && e.newValue) {
@@ -155,7 +153,7 @@ export default function App() {
       actorRole: 'admin',
       action: 'SYSTEM_READY',
       target: 'Plataforma de Agendas Personales',
-      details: 'Aislamiento estricto por Profesional y Recepcionista vinculada activo.',
+      details: 'Login por Nombre y Apellido con sesión recordada activo.',
     },
   ]);
 
@@ -223,7 +221,7 @@ export default function App() {
     },
   });
 
-  // Formulario de Nuevo Paciente (Siempre se crea dentro del consultorio del Profesional activo)
+  // Formulario de Nuevo Paciente
   const [newStudent, setNewStudent] = useState({
     name: '',
     age: '',
@@ -267,12 +265,6 @@ export default function App() {
       : DAYS_OF_WEEK.filter((d) => d !== 'Sábado');
   }, [scheduleConfig.includeSaturday]);
 
-  /**
-   * AISLAMIENTO ESTRICTO DE PACIENTES POR PROFESIONAL:
-   * - Cada Profesional (y su Recepcionista vinculada) SOLO ve los pacientes donde
-   *   `student.professionalId === activeWorkspaceId`.
-   * - Nunca ve pacientes ni turnos de otro profesional.
-   */
   const workspaceStudents = useMemo(() => {
     if (!user) return [];
     if (user.role === 'admin') {
@@ -296,7 +288,6 @@ export default function App() {
     [activeStudents]
   );
 
-  // Busca todos los turnos asignados en ese día y horario EXCLUSIVAMENTE dentro del consultorio activo
   const getStudentsInSlot = useCallback(
     (day: DayOfWeek, hour: string): SlotMatchItem[] => {
       const matches: SlotMatchItem[] = [];
@@ -313,11 +304,14 @@ export default function App() {
     [activeStudents]
   );
 
-  const handleLogin = (staffId: string, passwordInput: string): LoginResult => {
-    const res = loginWithStaffPassword(staffId, passwordInput);
+  const handleLogin = (
+    userNameInput: string,
+    passwordInput: string,
+    rememberMe: boolean
+  ): LoginResult => {
+    const res = loginByNameAndPassword(userNameInput, passwordInput, rememberMe);
     if (res.ok) {
       const loggedMember = res.member;
-      // Si entra el Admin de Usuarios, abrir directamente la pestaña de Configuración/Suscripciones
       setActiveTab(loggedMember.role === 'admin' ? 'settings' : 'grid');
       setShowArchived(false);
 
@@ -337,12 +331,11 @@ export default function App() {
         { name: loggedMember.fullName, role: loggedMember.role }
       );
     } else {
-      const target = staffMembers.find((s) => s.id === staffId);
       appendAuditLog(
         'LOGIN_REJECTED',
-        target?.fullName || 'Usuario',
+        userNameInput || 'Usuario',
         res.message,
-        { name: 'Intento bloqueado', role: target?.role || 'recepcion' }
+        { name: 'Intento bloqueado', role: 'recepcion' }
       );
     }
     return res;
@@ -357,7 +350,9 @@ export default function App() {
   };
 
   if (!user) {
-    return <LoginView staffMembers={staffMembers} onLogin={handleLogin} />;
+    return (
+      <LoginView initialUserName={rememberedUserName} onLogin={handleLogin} />
+    );
   }
 
   const handleAddAbsence = (studentId: string, e?: React.MouseEvent) => {
@@ -587,7 +582,6 @@ export default function App() {
     );
   };
 
-  // Suma el turno a la lista de turnos semanales del paciente dentro de la agenda de este profesional
   const handleAssignToSlot = (studentId: string) => {
     if (!selectedSlot) return;
     const target = workspaceStudents.find((s) => s.id === studentId);
@@ -618,7 +612,6 @@ export default function App() {
           };
         }
 
-        // Si otro paciente del MISMO profesional tenía ese horario, liberar solo ese horario
         const filteredOther = currentSlots.filter(
           (sl) => !(sl.day === selectedSlot.day && sl.hour === selectedSlot.hour)
         );
@@ -658,7 +651,6 @@ export default function App() {
     );
   };
 
-  // Cada profesional puede editar su propio horario personal
   const handleUpdateScheduleConfig = (nextCfg: ScheduleConfig) => {
     if (user.role === 'recepcion') return;
     const parsed = ScheduleConfigSchema.safeParse(nextCfg);
@@ -675,6 +667,40 @@ export default function App() {
       activeWorkspaceName,
       `${parsed.data.startHour}:00-${parsed.data.endHour}:00 (${parsed.data.slotDuration}m)`
     );
+  };
+
+  const handleUpdateOwnProfile = (changes: {
+    fullName: string;
+    specialtyOrLicense: string;
+    newPassword?: string;
+  }): { ok: boolean; message: string } => {
+    const res = updateOwnProfile(changes);
+    if (res.ok) {
+      // Si el profesional cambió su propio nombre, actualizar la etiqueta en sus pacientes
+      if (user.role === 'profesional') {
+        const trimmedName = changes.fullName.trim();
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.professionalId === user.id
+              ? {
+                  ...s,
+                  professionalName: trimmedName,
+                  slots: getStudentSlots(s).map((sl) => ({
+                    ...sl,
+                    professionalName: trimmedName,
+                  })),
+                }
+              : s
+          )
+        );
+      }
+      appendAuditLog(
+        'OWN_PROFILE_UPDATED',
+        changes.fullName.trim(),
+        'Actualización de nombre y/o contraseña personal'
+      );
+    }
+    return res;
   };
 
   const handleAddStaff = (memberData: {
@@ -715,7 +741,7 @@ export default function App() {
       appendAuditLog(
         'PASSWORD_UPDATED',
         target.fullName,
-        'Contraseña actualizada por Administrador de Usuarios'
+        'Contraseña restablecida por Administrador'
       );
     }
     return ok;
@@ -742,7 +768,7 @@ export default function App() {
       <Header
         activeTab={activeTab}
         setActiveTab={(tab) => {
-          if (user.role === 'recepcion' && (tab === 'reports' || tab === 'settings')) {
+          if (user.role === 'recepcion' && tab === 'reports') {
             return;
           }
           setActiveTab(tab);
@@ -761,7 +787,7 @@ export default function App() {
         onInstallPwa={handleInstallPwa}
       />
 
-      {/* ALERTA DE INASISTENCIAS CRÍTICAS (Solo de los pacientes de este profesional) */}
+      {/* ALERTA DE INASISTENCIAS CRÍTICAS */}
       {criticalStudents.length > 0 && (
         <div className="bg-rose-50 border-b border-rose-200 px-4 py-3 no-print">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -845,16 +871,16 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'settings' && user.role !== 'recepcion' && (
+        {activeTab === 'settings' && (
           <CenterSettings
             scheduleConfig={scheduleConfig}
             onChangeScheduleConfig={handleUpdateScheduleConfig}
             timeSlots={timeSlots}
-            currentRole={user.role}
-            currentUserId={user.id}
+            currentUser={user}
             workspaceOwnerName={activeWorkspaceName}
             auditLogs={auditLogs}
             onOpenBackupModal={() => setIsBackupModalOpen(true)}
+            onUpdateOwnProfile={handleUpdateOwnProfile}
             staffMembers={staffMembers}
             onAddStaffMember={handleAddStaff}
             onToggleSubscription={handleToggleSub}
@@ -864,7 +890,7 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL: ASIGNAR / SUMAR TURNO SEMANAL EN LA AGENDA DEL PROFESIONAL */}
+      {/* MODAL: ASIGNAR / SUMAR TURNO SEMANAL */}
       {isAssignModalOpen && selectedSlot && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
@@ -948,7 +974,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: REGISTRAR NUEVO PACIENTE EN LA AGENDA PERSONAL */}
+      {/* MODAL: REGISTRAR NUEVO PACIENTE */}
       {isStudentModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
           <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl space-y-4">
