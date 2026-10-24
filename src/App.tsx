@@ -319,26 +319,57 @@ export default function App() {
 
   const timeSlots = useMemo<TimeSlotItem[]>(() => {
     const slots: TimeSlotItem[] = [];
-    const startMins = scheduleConfig.startHour * 60;
-    const endMins = scheduleConfig.endHour * 60;
     const duration = scheduleConfig.slotDuration;
 
-    for (let time = startMins; time < endMins; time += duration) {
-      const startH = Math.floor(time / 60)
-        .toString()
-        .padStart(2, '0');
-      const startM = (time % 60).toString().padStart(2, '0');
-      const endTime = time + duration;
-      const endH = Math.floor(endTime / 60)
-        .toString()
-        .padStart(2, '0');
-      const endM = (endTime % 60).toString().padStart(2, '0');
+    const addRange = (
+      startHourVal: number,
+      endHourVal: number,
+      forcedShift?: 'mañana' | 'tarde'
+    ) => {
+      const startMins = startHourVal * 60;
+      const endMins = endHourVal * 60;
+      if (endMins <= startMins) return;
 
-      slots.push({
-        id: `${startH}:${startM}`,
-        label: `${startH}:${startM} - ${endH}:${endM}`,
-      });
+      for (let time = startMins; time < endMins; time += duration) {
+        const startHNum = Math.floor(time / 60);
+        const startH = startHNum.toString().padStart(2, '0');
+        const startM = (time % 60).toString().padStart(2, '0');
+        const endTime = time + duration;
+        const endH = Math.floor(endTime / 60)
+          .toString()
+          .padStart(2, '0');
+        const endM = (endTime % 60).toString().padStart(2, '0');
+        const id = `${startH}:${startM}`;
+
+        if (!slots.some((s) => s.id === id)) {
+          slots.push({
+            id,
+            label: `${startH}:${startM} - ${endH}:${endM}`,
+            shift: forcedShift ?? (startHNum < 13 ? 'mañana' : 'tarde'),
+          });
+        }
+      }
+    };
+
+    if (scheduleConfig.splitShifts) {
+      if (scheduleConfig.morningEnabled ?? true) {
+        addRange(
+          scheduleConfig.morningStartHour ?? 8,
+          scheduleConfig.morningEndHour ?? 12,
+          'mañana'
+        );
+      }
+      if (scheduleConfig.afternoonEnabled ?? true) {
+        addRange(
+          scheduleConfig.afternoonStartHour ?? 14,
+          scheduleConfig.afternoonEndHour ?? 20,
+          'tarde'
+        );
+      }
+    } else {
+      addRange(scheduleConfig.startHour, scheduleConfig.endHour);
     }
+
     return slots;
   }, [scheduleConfig]);
 

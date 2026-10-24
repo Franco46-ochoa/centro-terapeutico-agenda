@@ -280,93 +280,301 @@ export const CenterSettings: React.FC<CenterSettingsProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Hora de Inicio Jornada
-              </label>
-              <select
-                value={scheduleConfig.startHour}
-                onChange={(e) =>
-                  onChangeScheduleConfig({
-                    ...scheduleConfig,
-                    startHour: parseInt(e.target.value, 10),
-                  })
-                }
-                className="w-full p-2.5 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none"
-              >
-                {[6, 7, 8, 9, 10, 11, 12].map((hour) => (
-                  <option key={hour} value={hour}>
-                    {hour.toString().padStart(2, '0')}:00 hs
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Hora de Cierre Jornada
-              </label>
-              <select
-                value={scheduleConfig.endHour}
-                onChange={(e) =>
-                  onChangeScheduleConfig({
-                    ...scheduleConfig,
-                    endHour: parseInt(e.target.value, 10),
-                  })
-                }
-                className="w-full p-2.5 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none"
-              >
-                {[14, 15, 16, 17, 18, 19, 20, 21, 22].map((hour) => (
-                  <option key={hour} value={hour}>
-                    {hour.toString().padStart(2, '0')}:00 hs
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Duración del Turno / Módulo
-              </label>
-              <select
-                value={scheduleConfig.slotDuration}
-                onChange={(e) =>
-                  onChangeScheduleConfig({
-                    ...scheduleConfig,
-                    slotDuration: parseInt(e.target.value, 10),
-                  })
-                }
-                className="w-full p-2.5 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none"
-              >
-                <option value={30}>30 minutos</option>
-                <option value={45}>45 minutos</option>
-                <option value={60}>60 minutos (1 hora)</option>
-                <option value={90}>90 minutos (1 h 30 min)</option>
-                <option value={120}>120 minutos (2 horas)</option>
-              </select>
-            </div>
-
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <div className="space-y-6">
+            {/* Selector de Modalidad: Jornada Corrida vs Turno Mañana y Turno Tarde */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-teal-50/70 rounded-xl border border-teal-200 gap-3">
               <div>
-                <span className="font-semibold text-slate-800 block text-sm">
-                  Incluir día Sábado
+                <span className="font-bold text-slate-900 block text-sm">
+                  Dividir en Turno Mañana y Turno Tarde (Horario Cortado)
                 </span>
-                <span className="text-xs text-slate-500">
-                  Muestra u oculta la columna de sábados en tu agenda personal
+                <span className="text-xs text-slate-600">
+                  Actívelo si desea configurar un bloque por la mañana y otro por la tarde
+                  con pausa intermedia.
                 </span>
               </div>
               <input
                 type="checkbox"
-                checked={scheduleConfig.includeSaturday}
+                checked={Boolean(scheduleConfig.splitShifts)}
                 onChange={(e) =>
                   onChangeScheduleConfig({
                     ...scheduleConfig,
-                    includeSaturday: e.target.checked,
+                    splitShifts: e.target.checked,
+                    morningEnabled: scheduleConfig.morningEnabled ?? true,
+                    morningStartHour: scheduleConfig.morningStartHour ?? 8,
+                    morningEndHour: scheduleConfig.morningEndHour ?? 12,
+                    afternoonEnabled: scheduleConfig.afternoonEnabled ?? true,
+                    afternoonStartHour: scheduleConfig.afternoonStartHour ?? 14,
+                    afternoonEndHour: scheduleConfig.afternoonEndHour ?? 20,
                   })
                 }
-                className="w-5 h-5 text-teal-600 rounded focus:ring-teal-500 border-slate-300 cursor-pointer"
+                className="w-5 h-5 text-teal-600 rounded focus:ring-teal-500 border-slate-300 cursor-pointer shrink-0"
               />
+            </div>
+
+            {!scheduleConfig.splitShifts ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Hora de Inicio Jornada (07:00 a 23:00 hs)
+                  </label>
+                  <select
+                    value={scheduleConfig.startHour}
+                    onChange={(e) => {
+                      const nextStart = parseInt(e.target.value, 10);
+                      const nextEnd =
+                        scheduleConfig.endHour <= nextStart
+                          ? Math.min(23, nextStart + 1)
+                          : scheduleConfig.endHour;
+                      onChangeScheduleConfig({
+                        ...scheduleConfig,
+                        startHour: nextStart,
+                        endHour: nextEnd,
+                      });
+                    }}
+                    className="w-full p-2.5 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none"
+                  >
+                    {Array.from({ length: 17 }, (_, i) => i + 7).map((hour) => (
+                      <option key={hour} value={hour}>
+                        {hour.toString().padStart(2, '0')}:00 hs
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Hora de Cierre Jornada (07:00 a 23:00 hs)
+                  </label>
+                  <select
+                    value={scheduleConfig.endHour}
+                    onChange={(e) => {
+                      const nextEnd = parseInt(e.target.value, 10);
+                      const nextStart =
+                        scheduleConfig.startHour >= nextEnd
+                          ? Math.max(7, nextEnd - 1)
+                          : scheduleConfig.startHour;
+                      onChangeScheduleConfig({
+                        ...scheduleConfig,
+                        startHour: nextStart,
+                        endHour: nextEnd,
+                      });
+                    }}
+                    className="w-full p-2.5 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none"
+                  >
+                    {Array.from({ length: 17 }, (_, i) => i + 7).map((hour) => (
+                      <option key={hour} value={hour}>
+                        {hour.toString().padStart(2, '0')}:00 hs
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Bloque Turno Mañana */}
+                <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-amber-950">
+                      ☀️ Turno Mañana
+                    </span>
+                    <label className="flex items-center gap-1.5 text-xs text-amber-900 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={scheduleConfig.morningEnabled ?? true}
+                        onChange={(e) =>
+                          onChangeScheduleConfig({
+                            ...scheduleConfig,
+                            morningEnabled: e.target.checked,
+                          })
+                        }
+                        className="rounded text-teal-600"
+                      />
+                      <span>Habilitado</span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Inicio Mañana
+                      </label>
+                      <select
+                        disabled={!(scheduleConfig.morningEnabled ?? true)}
+                        value={scheduleConfig.morningStartHour ?? 8}
+                        onChange={(e) => {
+                          const start = parseInt(e.target.value, 10);
+                          const currentEnd = scheduleConfig.morningEndHour ?? 12;
+                          onChangeScheduleConfig({
+                            ...scheduleConfig,
+                            morningStartHour: start,
+                            morningEndHour:
+                              currentEnd <= start ? Math.min(23, start + 1) : currentEnd,
+                          });
+                        }}
+                        className="w-full p-2 text-xs bg-white border border-slate-300 rounded-lg outline-none disabled:opacity-50"
+                      >
+                        {Array.from({ length: 17 }, (_, i) => i + 7).map((hour) => (
+                          <option key={hour} value={hour}>
+                            {hour.toString().padStart(2, '0')}:00 hs
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Cierre Mañana
+                      </label>
+                      <select
+                        disabled={!(scheduleConfig.morningEnabled ?? true)}
+                        value={scheduleConfig.morningEndHour ?? 12}
+                        onChange={(e) => {
+                          const end = parseInt(e.target.value, 10);
+                          const currentStart = scheduleConfig.morningStartHour ?? 8;
+                          onChangeScheduleConfig({
+                            ...scheduleConfig,
+                            morningStartHour:
+                              currentStart >= end ? Math.max(7, end - 1) : currentStart,
+                            morningEndHour: end,
+                          });
+                        }}
+                        className="w-full p-2 text-xs bg-white border border-slate-300 rounded-lg outline-none disabled:opacity-50"
+                      >
+                        {Array.from({ length: 17 }, (_, i) => i + 7).map((hour) => (
+                          <option key={hour} value={hour}>
+                            {hour.toString().padStart(2, '0')}:00 hs
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bloque Turno Tarde */}
+                <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-indigo-950">
+                      🌇 Turno Tarde
+                    </span>
+                    <label className="flex items-center gap-1.5 text-xs text-indigo-900 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={scheduleConfig.afternoonEnabled ?? true}
+                        onChange={(e) =>
+                          onChangeScheduleConfig({
+                            ...scheduleConfig,
+                            afternoonEnabled: e.target.checked,
+                          })
+                        }
+                        className="rounded text-teal-600"
+                      />
+                      <span>Habilitado</span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Inicio Tarde
+                      </label>
+                      <select
+                        disabled={!(scheduleConfig.afternoonEnabled ?? true)}
+                        value={scheduleConfig.afternoonStartHour ?? 14}
+                        onChange={(e) => {
+                          const start = parseInt(e.target.value, 10);
+                          const currentEnd = scheduleConfig.afternoonEndHour ?? 20;
+                          onChangeScheduleConfig({
+                            ...scheduleConfig,
+                            afternoonStartHour: start,
+                            afternoonEndHour:
+                              currentEnd <= start ? Math.min(23, start + 1) : currentEnd,
+                          });
+                        }}
+                        className="w-full p-2 text-xs bg-white border border-slate-300 rounded-lg outline-none disabled:opacity-50"
+                      >
+                        {Array.from({ length: 17 }, (_, i) => i + 7).map((hour) => (
+                          <option key={hour} value={hour}>
+                            {hour.toString().padStart(2, '0')}:00 hs
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Cierre Tarde
+                      </label>
+                      <select
+                        disabled={!(scheduleConfig.afternoonEnabled ?? true)}
+                        value={scheduleConfig.afternoonEndHour ?? 20}
+                        onChange={(e) => {
+                          const end = parseInt(e.target.value, 10);
+                          const currentStart = scheduleConfig.afternoonStartHour ?? 14;
+                          onChangeScheduleConfig({
+                            ...scheduleConfig,
+                            afternoonStartHour:
+                              currentStart >= end ? Math.max(7, end - 1) : currentStart,
+                            afternoonEndHour: end,
+                          });
+                        }}
+                        className="w-full p-2 text-xs bg-white border border-slate-300 rounded-lg outline-none disabled:opacity-50"
+                      >
+                        {Array.from({ length: 17 }, (_, i) => i + 7).map((hour) => (
+                          <option key={hour} value={hour}>
+                            {hour.toString().padStart(2, '0')}:00 hs
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Duración del Turno / Módulo
+                </label>
+                <select
+                  value={scheduleConfig.slotDuration}
+                  onChange={(e) =>
+                    onChangeScheduleConfig({
+                      ...scheduleConfig,
+                      slotDuration: parseInt(e.target.value, 10),
+                    })
+                  }
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none"
+                >
+                  <option value={30}>30 minutos</option>
+                  <option value={45}>45 minutos</option>
+                  <option value={60}>60 minutos (1 hora)</option>
+                  <option value={90}>90 minutos (1 h 30 min)</option>
+                  <option value={120}>120 minutos (2 horas)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div>
+                  <span className="font-semibold text-slate-800 block text-sm">
+                    Incluir día Sábado
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Muestra u oculta la columna de sábados en tu agenda personal
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={scheduleConfig.includeSaturday}
+                  onChange={(e) =>
+                    onChangeScheduleConfig({
+                      ...scheduleConfig,
+                      includeSaturday: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5 text-teal-600 rounded focus:ring-teal-500 border-slate-300 cursor-pointer"
+                />
+              </div>
             </div>
           </div>
 

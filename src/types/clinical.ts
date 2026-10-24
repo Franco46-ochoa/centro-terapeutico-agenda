@@ -64,6 +64,13 @@ export interface ScheduleConfig {
   endHour: number;
   slotDuration: number;
   includeSaturday: boolean;
+  splitShifts?: boolean;
+  morningEnabled?: boolean;
+  morningStartHour?: number;
+  morningEndHour?: number;
+  afternoonEnabled?: boolean;
+  afternoonStartHour?: number;
+  afternoonEndHour?: number;
 }
 
 export interface AuditLogItem {
@@ -79,6 +86,7 @@ export interface AuditLogItem {
 export interface TimeSlotItem {
   id: string;
   label: string;
+  shift: 'mañana' | 'tarde';
 }
 
 /**

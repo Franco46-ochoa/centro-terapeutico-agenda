@@ -100,22 +100,25 @@ export const ClinicalEntrySchema = z.object({
   amendsEntryId: z.string().optional(),
 });
 
-export const ScheduleConfigSchema = z
-  .object({
-    startHour: z.number().int().min(6).max(20),
-    endHour: z.number().int().min(8).max(23),
-    slotDuration: z.union([
-      z.literal(30),
-      z.literal(45),
-      z.literal(60),
-      z.literal(90),
-      z.literal(120),
-    ]),
-    includeSaturday: z.boolean(),
-  })
-  .refine((cfg) => cfg.endHour > cfg.startHour, {
-    message: 'La hora de cierre debe ser posterior a la hora de inicio.',
-  });
+export const ScheduleConfigSchema = z.object({
+  startHour: z.number().int().min(6).max(23),
+  endHour: z.number().int().min(6).max(23),
+  slotDuration: z.union([
+    z.literal(30),
+    z.literal(45),
+    z.literal(60),
+    z.literal(90),
+    z.literal(120),
+  ]),
+  includeSaturday: z.boolean(),
+  splitShifts: z.boolean().optional(),
+  morningEnabled: z.boolean().optional(),
+  morningStartHour: z.number().int().min(6).max(23).optional(),
+  morningEndHour: z.number().int().min(6).max(23).optional(),
+  afternoonEnabled: z.boolean().optional(),
+  afternoonStartHour: z.number().int().min(6).max(23).optional(),
+  afternoonEndHour: z.number().int().min(6).max(23).optional(),
+});
 
 export const BackupPayloadSchema = z.object({
   version: z.literal(1),
