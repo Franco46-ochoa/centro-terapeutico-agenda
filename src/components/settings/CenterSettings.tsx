@@ -8,6 +8,9 @@ import {
   Lock,
   KeyRound,
   Check,
+  UserPlus,
+  Trash2,
+  Users,
 } from 'lucide-react';
 import type {
   AppRole,
@@ -15,47 +18,109 @@ import type {
   ScheduleConfig,
   TimeSlotItem,
 } from '../../types/clinical';
+import type { StaffMember } from '../../hooks/useAuth';
 
 interface CenterSettingsProps {
   scheduleConfig: ScheduleConfig;
   onChangeScheduleConfig: (cfg: ScheduleConfig) => void;
   timeSlots: TimeSlotItem[];
   currentRole: AppRole;
+  currentUserId: string;
   auditLogs: AuditLogItem[];
   onOpenBackupModal: () => void;
-  rolePasswords?: Record<AppRole, string>;
-  onUpdateRolePassword?: (role: AppRole, newPass: string) => boolean;
+  staffMembers: StaffMember[];
+  onAddStaffMember: (member: {
+    fullName: string;
+    specialtyOrLicense: string;
+    role: AppRole;
+    password: string;
+  }) => StaffMember | null;
+  onUpdateStaffPassword: (staffId: string, newPass: string) => boolean;
+  onRemoveStaffMember: (staffId: string) => boolean;
 }
+
+const ROLE_BADGE_MAP: Record<AppRole, { label: string; style: string }> = {
+  profesional: {
+    label: 'Profesional / Terapeuta',
+    style: 'bg-teal-100 text-teal-800 border-teal-300',
+  },
+  admin: {
+    label: 'Dirección / Admin',
+    style: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+  },
+  recepcion: {
+    label: 'Recepción / Secretaría',
+    style: 'bg-amber-100 text-amber-800 border-amber-300',
+  },
+};
 
 export const CenterSettings: React.FC<CenterSettingsProps> = ({
   scheduleConfig,
   onChangeScheduleConfig,
   timeSlots,
   currentRole,
+  currentUserId,
   auditLogs,
   onOpenBackupModal,
-  rolePasswords,
-  onUpdateRolePassword,
+  staffMembers,
+  onAddStaffMember,
+  onUpdateStaffPassword,
+  onRemoveStaffMember,
 }) => {
   const isAdmin = currentRole === 'admin';
-  const [targetRole, setTargetRole] = useState<AppRole>('profesional');
-  const [newPassword, setNewPassword] = useState('');
-  const [passwordSavedMsg, setPasswordSavedMsg] = useState<string | null>(null);
+
+  // Estado para Agregar Nuevo Personal
+  const [newFullName, setNewFullName] = useState('');
+  const [newSpecialty, setNewSpecialty] = useState('');
+  const [newRole, setNewRole] = useState<AppRole>('profesional');
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [staffStatusMsg, setStaffStatusMsg] = useState<string | null>(null);
+
+  // Estado para Cambiar Contraseña de un Usuario Existente
+  const [selectedStaffId, setSelectedStaffId] = useState<string>(
+    staffMembers[0]?.id || ''
+  );
+  const [updatedPassword, setUpdatedPassword] = useState('');
+
+  const showTemporaryMessage = (msg: string) => {
+    setStaffStatusMsg(msg);
+    setTimeout(() => setStaffStatusMsg(null), 4000);
+  };
+
+  const handleCreateStaff = (e: React.FormEvent) => {
+    e.preventDefault();
+    const created = onAddStaffMember({
+      fullName: newFullName,
+      specialtyOrLicense: newSpecialty,
+      role: newRole,
+      password: newStaffPassword,
+    });
+    if (created) {
+      setNewFullName('');
+      setNewSpecialty('');
+      setNewStaffPassword('');
+      setSelectedStaffId(created.id);
+      showTemporaryMessage(
+        `Personal agregado: ${created.fullName} (${ROLE_BADGE_MAP[created.role].label}).`
+      );
+    }
+  };
 
   const handleSavePassword = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!onUpdateRolePassword) return;
-    if (onUpdateRolePassword(targetRole, newPassword)) {
-      setNewPassword('');
-      setPasswordSavedMsg(
-        `Contraseña del perfil "${targetRole}" actualizada correctamente.`
+    if (!selectedStaffId) return;
+    if (onUpdateStaffPassword(selectedStaffId, updatedPassword)) {
+      const target = staffMembers.find((s) => s.id === selectedStaffId);
+      setUpdatedPassword('');
+      showTemporaryMessage(
+        `Contraseña de ${target?.fullName || 'usuario'} actualizada correctamente.`
       );
-      setTimeout(() => setPasswordSavedMsg(null), 4000);
     }
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* 1. PARÁMETROS DEL HORARIO Y AGENDA */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6 flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -183,63 +248,206 @@ export const CenterSettings: React.FC<CenterSettingsProps> = ({
         </div>
       </div>
 
-      {/* GESTIÓN DE CONTRASEÑAS POR ROL (EXCLUSIVO DIRECCIÓN / ADMIN) */}
-      {isAdmin && rolePasswords && onUpdateRolePassword && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-            <div className="p-3 bg-teal-50 text-teal-600 rounded-lg">
-              <KeyRound className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">
-                Contraseñas de Acceso por Perfil
-              </h3>
-              <p className="text-xs text-slate-500">
-                Defina la clave asignada para Profesional, Dirección/Admin y Recepción.
-              </p>
+      {/* 2. GESTIÓN DE PERSONAL Y CONTRASEÑAS INDIVIDUALES (EXCLUSIVO DIRECCIÓN / ADMIN) */}
+      {isAdmin && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4 flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-teal-50 text-teal-600 rounded-lg">
+                <Users className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">
+                  Gestión de Personal y Contraseñas ({staffMembers.length} integrantes)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Agregue profesionales, recepcionistas o directivos con su propia clave y
+                  matrícula para firmar en la Historia Clínica.
+                </p>
+              </div>
             </div>
           </div>
 
-          {passwordSavedMsg && (
+          {staffStatusMsg && (
             <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2 font-medium">
-              <Check className="w-4 h-4" />
-              <span>{passwordSavedMsg}</span>
+              <Check className="w-4 h-4 shrink-0" />
+              <span>{staffStatusMsg}</span>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="text-slate-500 font-medium">Profesional</div>
-              <div className="font-mono font-bold text-teal-700 mt-1">
-                {rolePasswords.profesional}
+          {/* Formulario para Agregar Nuevo Integrante del Personal */}
+          <form
+            onSubmit={handleCreateStaff}
+            className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3"
+          >
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <UserPlus className="w-4 h-4 text-teal-600" />
+              <span>Agregar Nuevo Integrante al Equipo</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Nombre y Apellido
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Lic. Carla Gómez"
+                  value={newFullName}
+                  onChange={(e) => setNewFullName(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Especialidad / Matrícula / Cargo
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Fonoaudiología • M.N. 7412"
+                  value={newSpecialty}
+                  onChange={(e) => setNewSpecialty(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Área / Nivel de Acceso
+                </label>
+                <select
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value as AppRole)}
+                  className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+                >
+                  <option value="profesional">Profesional (Acceso Clínico)</option>
+                  <option value="recepcion">Recepción (Solo Turnos/Faltas)</option>
+                  <option value="admin">Dirección / Admin (Acceso Total)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Contraseña Asignada
+                </label>
+                <input
+                  type="text"
+                  required
+                  minLength={4}
+                  placeholder="Ej: carla2026"
+                  value={newStaffPassword}
+                  onChange={(e) => setNewStaffPassword(e.target.value)}
+                  className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                />
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="text-slate-500 font-medium">Dirección / Admin</div>
-              <div className="font-mono font-bold text-indigo-700 mt-1">
-                {rolePasswords.admin}
-              </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="submit"
+                className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Guardar Nuevo Personal</span>
+              </button>
             </div>
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="text-slate-500 font-medium">Recepción</div>
-              <div className="font-mono font-bold text-amber-700 mt-1">
-                {rolePasswords.recepcion}
-              </div>
+          </form>
+
+          {/* Listado del Personal Registrado */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+              Personal Activo y Claves de Ingreso
+            </h4>
+
+            <div className="border border-slate-200 rounded-xl divide-y divide-slate-200 overflow-hidden">
+              {staffMembers.map((member) => {
+                const badge = ROLE_BADGE_MAP[member.role];
+                const isSelf = member.id === currentUserId;
+                return (
+                  <div
+                    key={member.id}
+                    className="p-3.5 bg-white hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-900">
+                          {member.fullName}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badge.style}`}
+                        >
+                          {badge.label}
+                        </span>
+                        {isSelf && (
+                          <span className="text-[10px] bg-slate-800 text-white px-2 py-0.5 rounded font-semibold">
+                            Sesión actual
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {member.specialtyOrLicense}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
+                        <span className="text-slate-500 mr-1.5">Clave:</span>
+                        <code className="font-mono font-bold text-slate-900">
+                          {member.password}
+                        </code>
+                      </div>
+
+                      {!isSelf && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `¿Dar de baja a ${member.fullName} del acceso al sistema?`
+                              )
+                            ) {
+                              onRemoveStaffMember(member.id);
+                              showTemporaryMessage(
+                                `Usuario ${member.fullName} dado de baja.`
+                              );
+                            }
+                          }}
+                          title="Dar de baja a este usuario"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
+          {/* Cambiar contraseña de cualquier integrante */}
           <form
             onSubmit={handleSavePassword}
-            className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2"
+            className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-3"
           >
+            <div className="flex items-center gap-1.5 sm:col-span-3 text-xs font-bold uppercase tracking-wider text-slate-600">
+              <KeyRound className="w-3.5 h-3.5 text-teal-600" />
+              <span>Cambiar Contraseña de un Usuario Existente</span>
+            </div>
+
             <select
-              value={targetRole}
-              onChange={(e) => setTargetRole(e.target.value as AppRole)}
+              value={selectedStaffId}
+              onChange={(e) => setSelectedStaffId(e.target.value)}
               className="text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-medium"
             >
-              <option value="profesional">Cambiar clave: Profesional</option>
-              <option value="admin">Cambiar clave: Dirección / Admin</option>
-              <option value="recepcion">Cambiar clave: Recepción</option>
+              {staffMembers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.fullName} ({ROLE_BADGE_MAP[m.role].label})
+                </option>
+              ))}
             </select>
 
             <input
@@ -247,22 +455,22 @@ export const CenterSettings: React.FC<CenterSettingsProps> = ({
               required
               minLength={4}
               placeholder="Nueva contraseña (mín. 4 caracteres)..."
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+              value={updatedPassword}
+              onChange={(e) => setUpdatedPassword(e.target.value)}
+              className="text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-mono"
             />
 
             <button
               type="submit"
-              className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold py-2.5 px-4 rounded-lg shadow-sm transition cursor-pointer"
+              className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-2.5 px-4 rounded-lg shadow-sm transition cursor-pointer"
             >
-              Actualizar Contraseña
+              Actualizar Clave
             </button>
           </form>
         </div>
       )}
 
-      {/* SECCIÓN DE COPIAS DE SEGURIDAD CIFRADAS Y AUDITORÍA (SOLO ADMIN) */}
+      {/* 3. SECCIÓN DE COPIAS DE SEGURIDAD CIFRADAS Y AUDITORÍA (SOLO ADMIN) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
@@ -295,8 +503,9 @@ export const CenterSettings: React.FC<CenterSettingsProps> = ({
           <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-500 flex items-center gap-2">
             <Lock className="w-4 h-4 text-slate-400" />
             <span>
-              El registro de auditoría (`audit_logs`) y las copias de seguridad cifradas están
-              restringidos exclusivamente al rol <strong>Dirección / Admin</strong>.
+              El registro de auditoría (`audit_logs`), la gestión de personal y las copias de
+              seguridad cifradas están restringidos exclusivamente al rol{' '}
+              <strong>Dirección / Admin</strong>.
             </span>
           </div>
         ) : (

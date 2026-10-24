@@ -22,7 +22,7 @@ import { CenterSettings } from './components/settings/CenterSettings';
 import { EncryptedBackupModal } from './components/settings/EncryptedBackupModal';
 import { IdleLockOverlay } from './components/auth/IdleLockOverlay';
 import { LoginView } from './components/auth/LoginView';
-import { useAuth } from './hooks/useAuth';
+import { useAuth, type StaffMember } from './hooks/useAuth';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { useRealtimeCenterData } from './hooks/useRealtimeCenterData';
 
@@ -35,12 +35,14 @@ export default function App() {
   const {
     user,
     isLocked,
-    rolePasswords,
-    loginWithRolePassword,
+    staffMembers,
+    loginWithStaffPassword,
     logout,
     lockSession,
     unlockSession,
-    updateRolePassword,
+    addStaffMember,
+    updateStaffPassword,
+    removeStaffMember,
   } = useAuth();
   const { isRealtimeConnected } = useRealtimeCenterData();
 
@@ -67,7 +69,7 @@ export default function App() {
       actorRole: 'admin',
       action: 'SYSTEM_READY',
       target: 'Centro Terapéutico',
-      details: 'Control de acceso por contraseña de rol activo (Ley 25.326 / 26.529).',
+      details: 'Control de acceso multi-personal activo (Ley 25.326 / 26.529).',
     },
   ]);
 
@@ -205,31 +207,33 @@ export default function App() {
     [activeStudents]
   );
 
-  const handleLogin = (role: AppRole, passwordInput: string): boolean => {
-    const ok = loginWithRolePassword(role, passwordInput);
-    if (ok) {
+  const handleLogin = (staffId: string, passwordInput: string): boolean => {
+    const loggedMember = loginWithStaffPassword(staffId, passwordInput);
+    if (loggedMember) {
       setActiveTab('grid');
       setShowArchived(false);
       appendAuditLog(
         'LOGIN_SUCCESS',
-        `Perfil ${role}`,
-        `Ingreso autorizado al módulo de ${role}`,
-        { name: `Perfil ${role}`, role }
+        loggedMember.fullName,
+        `Ingreso autorizado (${loggedMember.specialtyOrLicense})`,
+        { name: loggedMember.fullName, role: loggedMember.role }
       );
+      return true;
     } else {
+      const target = staffMembers.find((s) => s.id === staffId);
       appendAuditLog(
         'LOGIN_FAILED',
-        `Perfil ${role}`,
+        target?.fullName || 'Usuario',
         'Intento fallido de contraseña en pantalla de inicio',
-        { name: 'Intento no autenticado', role }
+        { name: 'Intento no autenticado', role: target?.role || 'recepcion' }
       );
+      return false;
     }
-    return ok;
   };
 
   const handleLogout = () => {
     if (user) {
-      appendAuditLog('LOGOUT', user.role, 'Cierre de sesión manual');
+      appendAuditLog('LOGOUT', user.fullName, 'Cierre de sesión manual');
     }
     setActiveTab('grid');
     logout();
@@ -237,7 +241,7 @@ export default function App() {
 
   // Si ningún usuario ingresó su contraseña todavía, mostrar la Pantalla de Inicio
   if (!user) {
-    return <LoginView onLogin={handleLogin} />;
+    return <LoginView staffMembers={staffMembers} onLogin={handleLogin} />;
   }
 
   // Inasistencias con registro auditable
@@ -504,14 +508,41 @@ export default function App() {
     );
   };
 
-  const handlePasswordChange = (targetRole: AppRole, newPass: string): boolean => {
-    const ok = updateRolePassword(targetRole, newPass);
-    if (ok) {
+  const handleAddStaff = (memberData: {
+    fullName: string;
+    specialtyOrLicense: string;
+    role: AppRole;
+    password: string;
+  }): StaffMember | null => {
+    const created = addStaffMember(memberData);
+    if (created) {
+      appendAuditLog(
+        'STAFF_ADDED',
+        created.fullName,
+        `Alta de personal con rol ${created.role} (${created.specialtyOrLicense})`
+      );
+    }
+    return created;
+  };
+
+  const handlePasswordChange = (staffId: string, newPass: string): boolean => {
+    const target = staffMembers.find((s) => s.id === staffId);
+    const ok = updateStaffPassword(staffId, newPass);
+    if (ok && target) {
       appendAuditLog(
         'PASSWORD_UPDATED',
-        `Rol: ${targetRole}`,
-        `Contraseña de acceso para ${targetRole} actualizada por Dirección/Admin`
+        target.fullName,
+        `Contraseña actualizada por Dirección/Admin`
       );
+    }
+    return ok;
+  };
+
+  const handleRemoveStaff = (staffId: string): boolean => {
+    const target = staffMembers.find((s) => s.id === staffId);
+    const ok = removeStaffMember(staffId);
+    if (ok && target) {
+      appendAuditLog('STAFF_REMOVED', target.fullName, 'Baja de acceso al sistema');
     }
     return ok;
   };
@@ -635,10 +666,13 @@ export default function App() {
             onChangeScheduleConfig={handleUpdateScheduleConfig}
             timeSlots={timeSlots}
             currentRole={user.role}
+            currentUserId={user.id}
             auditLogs={auditLogs}
             onOpenBackupModal={() => setIsBackupModalOpen(true)}
-            rolePasswords={rolePasswords}
-            onUpdateRolePassword={handlePasswordChange}
+            staffMembers={staffMembers}
+            onAddStaffMember={handleAddStaff}
+            onUpdateStaffPassword={handlePasswordChange}
+            onRemoveStaffMember={handleRemoveStaff}
           />
         )}
       </main>
