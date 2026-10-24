@@ -802,8 +802,8 @@ export default function App() {
         onInstallPwa={handleInstallPwa}
       />
 
-      {/* ALERTA DE INASISTENCIAS CRÍTICAS */}
-      {criticalStudents.length > 0 && (
+      {/* ALERTA DE INASISTENCIAS CRÍTICAS (Solo para Profesional y Recepción, nunca para Admin de Usuarios) */}
+      {user.role !== 'admin' && criticalStudents.length > 0 && (
         <div className="bg-rose-50 border-b border-rose-200 px-4 py-3 no-print">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div className="flex items-center space-x-3 text-rose-800">
@@ -828,65 +828,7 @@ export default function App() {
 
       {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {activeTab === 'grid' && (
-          <ScheduleGrid
-            activeDays={activeDays}
-            timeSlots={timeSlots}
-            scheduleConfig={scheduleConfig}
-            currentRole={user.role}
-            workspaceOwnerName={activeWorkspaceName}
-            getStudentsInSlot={getStudentsInSlot}
-            onSelectStudent={(id) => {
-              setSelectedStudentId(id);
-              setActiveTab('students');
-            }}
-            onAddAbsence={handleAddAbsence}
-            onRemoveFromSlot={handleRemoveFromSlot}
-            onOpenAssignModal={(day, hour) => {
-              setSelectedSlot({ day, hour });
-              setIsAssignModalOpen(true);
-            }}
-          />
-        )}
-
-        {activeTab === 'students' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <PatientDirectory
-              students={workspaceStudents}
-              selectedStudentId={selectedStudentId}
-              onSelectStudent={setSelectedStudentId}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              currentRole={user.role}
-              showArchived={showArchived}
-              onToggleShowArchived={setShowArchived}
-            />
-
-            <ClinicalDossier
-              student={selectedStudent}
-              currentRole={user.role}
-              currentUserName={user.fullName}
-              onAddAbsence={handleAddAbsence}
-              onResetAbsences={handleResetAbsences}
-              onRemoveSlot={handleRemoveFromSlot}
-              onArchiveStudent={handleArchiveStudent}
-              onAddClinicalEntry={handleAddClinicalEntry}
-              onGoToReports={() => setActiveTab('reports')}
-            />
-          </div>
-        )}
-
-        {activeTab === 'reports' && user.role !== 'recepcion' && (
-          <AiReportGenerator
-            students={workspaceStudents}
-            selectedStudentId={selectedStudentId}
-            onSelectStudent={setSelectedStudentId}
-            currentUserName={user.fullName}
-            onSaveReportToHistory={handleSaveAiReportToHistory}
-          />
-        )}
-
-        {activeTab === 'settings' && (
+        {user.role === 'admin' ? (
           <CenterSettings
             scheduleConfig={scheduleConfig}
             onChangeScheduleConfig={handleUpdateScheduleConfig}
@@ -902,6 +844,84 @@ export default function App() {
             onUpdateStaffPassword={handlePasswordChange}
             onRemoveStaffMember={handleRemoveStaff}
           />
+        ) : (
+          <>
+            {activeTab === 'grid' && (
+              <ScheduleGrid
+                activeDays={activeDays}
+                timeSlots={timeSlots}
+                scheduleConfig={scheduleConfig}
+                currentRole={user.role}
+                workspaceOwnerName={activeWorkspaceName}
+                getStudentsInSlot={getStudentsInSlot}
+                onSelectStudent={(id) => {
+                  setSelectedStudentId(id);
+                  setActiveTab('students');
+                }}
+                onAddAbsence={handleAddAbsence}
+                onRemoveFromSlot={handleRemoveFromSlot}
+                onOpenAssignModal={(day, hour) => {
+                  setSelectedSlot({ day, hour });
+                  setIsAssignModalOpen(true);
+                }}
+              />
+            )}
+
+            {activeTab === 'students' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <PatientDirectory
+                  students={workspaceStudents}
+                  selectedStudentId={selectedStudentId}
+                  onSelectStudent={setSelectedStudentId}
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  currentRole={user.role}
+                  showArchived={showArchived}
+                  onToggleShowArchived={setShowArchived}
+                />
+
+                <ClinicalDossier
+                  student={selectedStudent}
+                  currentRole={user.role}
+                  currentUserName={user.fullName}
+                  onAddAbsence={handleAddAbsence}
+                  onResetAbsences={handleResetAbsences}
+                  onRemoveSlot={handleRemoveFromSlot}
+                  onArchiveStudent={handleArchiveStudent}
+                  onAddClinicalEntry={handleAddClinicalEntry}
+                  onGoToReports={() => setActiveTab('reports')}
+                />
+              </div>
+            )}
+
+            {activeTab === 'reports' && user.role === 'profesional' && (
+              <AiReportGenerator
+                students={workspaceStudents}
+                selectedStudentId={selectedStudentId}
+                onSelectStudent={setSelectedStudentId}
+                currentUserName={user.fullName}
+                onSaveReportToHistory={handleSaveAiReportToHistory}
+              />
+            )}
+
+            {activeTab === 'settings' && (
+              <CenterSettings
+                scheduleConfig={scheduleConfig}
+                onChangeScheduleConfig={handleUpdateScheduleConfig}
+                timeSlots={timeSlots}
+                currentUser={user}
+                workspaceOwnerName={activeWorkspaceName}
+                auditLogs={auditLogs}
+                onOpenBackupModal={() => setIsBackupModalOpen(true)}
+                onUpdateOwnProfile={handleUpdateOwnProfile}
+                staffMembers={staffMembers}
+                onAddStaffMember={handleAddStaff}
+                onToggleSubscription={handleToggleSub}
+                onUpdateStaffPassword={handlePasswordChange}
+                onRemoveStaffMember={handleRemoveStaff}
+              />
+            )}
+          </>
         )}
       </main>
 

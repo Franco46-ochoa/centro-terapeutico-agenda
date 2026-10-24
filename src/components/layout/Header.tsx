@@ -12,6 +12,7 @@ import {
   HardDrive,
   Download,
   LogOut,
+  Users,
 } from 'lucide-react';
 import type { AppRole } from '../../types/clinical';
 
@@ -33,7 +34,7 @@ interface HeaderProps {
 
 const ROLE_LABELS: Record<AppRole, string> = {
   profesional: 'Profesional Titular',
-  admin: 'Administrador',
+  admin: 'Administrador de Usuarios',
   recepcion: 'Recepción',
 };
 
@@ -50,7 +51,8 @@ export const Header: React.FC<HeaderProps> = ({
   canInstallPwa,
   onInstallPwa,
 }) => {
-  const canViewClinical = currentRole === 'admin' || currentRole === 'profesional';
+  const isAdmin = currentRole === 'admin';
+  const isProfesional = currentRole === 'profesional';
 
   return (
     <header className="bg-slate-900 text-slate-100 p-3 sm:p-4 sticky top-0 z-30 shadow-md no-print">
@@ -63,7 +65,9 @@ export const Header: React.FC<HeaderProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-base sm:text-xl font-bold tracking-tight">
-                  Centro Terapéutico - Agenda &amp; Evolución
+                  {isAdmin
+                    ? 'Panel de Administración de Usuarios y Suscripciones'
+                    : 'Centro Terapéutico - Agenda & Evolución'}
                 </h1>
                 <span
                   className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
@@ -114,37 +118,43 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           <nav className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            <button
-              onClick={() => setActiveTab('grid')}
-              className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
-                activeTab === 'grid'
-                  ? 'bg-teal-600 text-white'
-                  : 'hover:bg-slate-800 text-slate-300'
-              }`}
-            >
-              <Calendar className="w-4 h-4" /> Agenda
-            </button>
+            {/* Agenda y Pacientes: SOLO para Profesional y Recepción (NO para el Administrador de Usuarios) */}
+            {!isAdmin && (
+              <>
+                <button
+                  onClick={() => setActiveTab('grid')}
+                  className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
+                    activeTab === 'grid'
+                      ? 'bg-teal-600 text-white'
+                      : 'hover:bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  <Calendar className="w-4 h-4" /> Agenda
+                </button>
 
-            <button
-              onClick={() => setActiveTab('students')}
-              className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
-                activeTab === 'students'
-                  ? 'bg-teal-600 text-white'
-                  : 'hover:bg-slate-800 text-slate-300'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>
-                {canViewClinical
-                  ? 'Pacientes / Historia Clínica'
-                  : 'Pacientes y Turnos'}
-              </span>
-              <span className="bg-teal-800 text-teal-200 text-xs px-1.5 py-0.5 rounded-full font-bold">
-                {activeStudentsCount}
-              </span>
-            </button>
+                <button
+                  onClick={() => setActiveTab('students')}
+                  className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
+                    activeTab === 'students'
+                      ? 'bg-teal-600 text-white'
+                      : 'hover:bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>
+                    {isProfesional
+                      ? 'Pacientes / Historia Clínica'
+                      : 'Pacientes y Turnos'}
+                  </span>
+                  <span className="bg-teal-800 text-teal-200 text-xs px-1.5 py-0.5 rounded-full font-bold">
+                    {activeStudentsCount}
+                  </span>
+                </button>
+              </>
+            )}
 
-            {canViewClinical && (
+            {/* Informes IA: SOLO para Profesional */}
+            {isProfesional && (
               <button
                 onClick={() => setActiveTab('reports')}
                 className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
@@ -157,6 +167,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
+            {/* Configuración / Mi Cuenta / Gestión de Usuarios */}
             <button
               onClick={() => setActiveTab('settings')}
               className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
@@ -165,19 +176,31 @@ export const Header: React.FC<HeaderProps> = ({
                   : 'hover:bg-slate-800 text-slate-300'
               }`}
             >
-              <Settings className="w-4 h-4" />
-              <span className="hidden md:inline">
-                {currentRole === 'recepcion' ? 'Mi Cuenta' : 'Mi Cuenta / Config'}
-              </span>
+              {isAdmin ? (
+                <>
+                  <Users className="w-4 h-4" />
+                  <span>Usuarios y Suscripciones</span>
+                </>
+              ) : (
+                <>
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden md:inline">
+                    {currentRole === 'recepcion' ? 'Mi Cuenta' : 'Mi Cuenta / Horarios'}
+                  </span>
+                </>
+              )}
             </button>
 
-            <button
-              onClick={onOpenNewStudentModal}
-              className="flex items-center gap-1.5 bg-teal-500 hover:bg-teal-400 text-slate-900 font-semibold px-3 py-2 rounded-lg text-xs sm:text-sm transition shrink-0 cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span className="hidden sm:inline">Nuevo Paciente</span>
-            </button>
+            {/* Botón Nuevo Paciente: SOLO para Profesional y Recepción (NO para Admin de Usuarios) */}
+            {!isAdmin && (
+              <button
+                onClick={onOpenNewStudentModal}
+                className="flex items-center gap-1.5 bg-teal-500 hover:bg-teal-400 text-slate-900 font-semibold px-3 py-2 rounded-lg text-xs sm:text-sm transition shrink-0 cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span className="hidden sm:inline">Nuevo Paciente</span>
+              </button>
+            )}
 
             {canInstallPwa && (
               <button

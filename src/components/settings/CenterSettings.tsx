@@ -85,7 +85,7 @@ export const CenterSettings: React.FC<CenterSettingsProps> = ({
 }) => {
   const currentRole = currentUser.role;
   const isAdmin = currentRole === 'admin';
-  const canEditOwnSchedule = currentRole === 'profesional' || currentRole === 'admin';
+  const isProfesional = currentRole === 'profesional';
 
   // Estado para Editar Mi Cuenta Personal (Nombre, Matrícula/Cargo y Contraseña)
   const [myFullName, setMyFullName] = useState(currentUser.rawName);
@@ -261,8 +261,8 @@ export const CenterSettings: React.FC<CenterSettingsProps> = ({
         </form>
       </div>
 
-      {/* 2. PARÁMETROS DEL HORARIO PERSONAL DEL PROFESIONAL */}
-      {canEditOwnSchedule && (
+      {/* 2. PARÁMETROS DEL HORARIO PERSONAL DEL PROFESIONAL (SOLO PARA EL PROFESIONAL, NO PARA ADMIN) */}
+      {isProfesional && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6 flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -661,32 +661,34 @@ export const CenterSettings: React.FC<CenterSettingsProps> = ({
         </div>
       )}
 
-      {/* 4. COPIAS DE SEGURIDAD CIFRADAS Y AUDITORÍA (SOLO PROFESIONAL Y ADMIN) */}
-      {canEditOwnSchedule && (
+      {/* 4. COPIAS DE SEGURIDAD CIFRADAS (PARA PROFESIONAL) Y AUDITORÍA (PARA ADMIN) */}
+      {(isProfesional || isAdmin) && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-5">
-          <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
-                <Database className="w-6 h-6" />
+          {isProfesional && (
+            <div className="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+                  <Database className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Resguardo Cifrado de Mis Pacientes (AES-GCM 256)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Exportación e importación de copia de seguridad protegida por contraseña.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  Resguardo Cifrado de Datos (AES-GCM 256)
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Exportación e importación de copia de seguridad protegida por contraseña.
-                </p>
-              </div>
-            </div>
 
-            <button
-              onClick={onOpenBackupModal}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm transition cursor-pointer"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Exportar / Importar Backup Cifrado (.enc.json)</span>
-            </button>
-          </div>
+              <button
+                onClick={onOpenBackupModal}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm transition cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Exportar / Importar Backup Cifrado (.enc.json)</span>
+              </button>
+            </div>
+          )}
 
           {isAdmin && (
             <div className="space-y-2">
