@@ -64,6 +64,7 @@ export const NewStudentSchema = z.object({
     .string()
     .regex(/^([0-2][0-9]:[0-5][0-9])?$/, 'Formato de hora inválido.')
     .optional(),
+  professionalId: z.string().optional(),
 });
 
 export const ClinicalEntrySchema = z.object({
@@ -131,6 +132,8 @@ export const BackupPayloadSchema = z.object({
           hour: z.string(),
         })
         .nullable(),
+      professionalId: z.string().optional(),
+      professionalName: z.string().optional(),
       archivedAt: z.string().nullable().optional(),
       archiveReason: z.string().nullable().optional(),
       attendanceHistory: z

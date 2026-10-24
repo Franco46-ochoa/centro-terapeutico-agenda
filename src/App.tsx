@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { ShieldAlert, X, AlertCircle } from 'lucide-react';
+import { ShieldAlert, X, AlertCircle, UserCheck } from 'lucide-react';
 import {
   CONDITIONS,
   DAYS_OF_WEEK,
@@ -31,6 +31,38 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+const STUDENTS_STORAGE_KEY = 'ct_students_data_v1';
+const SCHEDULE_STORAGE_KEY = 'ct_schedule_config_v1';
+
+const DEFAULT_SCHEDULE_CONFIG: ScheduleConfig = {
+  startHour: 9,
+  endHour: 18,
+  slotDuration: 60,
+  includeSaturday: false,
+};
+
+function loadPersistedStudents(): StudentPatient[] {
+  try {
+    const raw = window.localStorage.getItem(STUDENTS_STORAGE_KEY);
+    if (!raw) return INITIAL_STUDENTS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_STUDENTS;
+  } catch {
+    return INITIAL_STUDENTS;
+  }
+}
+
+function loadPersistedSchedule(): ScheduleConfig {
+  try {
+    const raw = window.localStorage.getItem(SCHEDULE_STORAGE_KEY);
+    if (!raw) return DEFAULT_SCHEDULE_CONFIG;
+    const parsed = ScheduleConfigSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : DEFAULT_SCHEDULE_CONFIG;
+  } catch {
+    return DEFAULT_SCHEDULE_CONFIG;
+  }
+}
+
 export default function App() {
   const {
     user,
@@ -47,20 +79,75 @@ export default function App() {
   const { isRealtimeConnected } = useRealtimeCenterData();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('grid');
+  const [students, setStudents] = useState<StudentPatient[]>(() =>
+    loadPersistedStudents()
+  );
+  const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>(() =>
+    loadPersistedSchedule()
+  );
+
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(
-    INITIAL_STUDENTS[0]?.id ?? null
+    () => loadPersistedStudents()[0]?.id ?? null
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [selectedProfessionalFilter, setSelectedProfessionalFilter] =
+    useState<string>('ALL');
 
-  const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({
-    startHour: 9,
-    endHour: 18,
-    slotDuration: 60,
-    includeSaturday: false,
-  });
+  const professionals = useMemo(
+    () =>
+      staffMembers.filter(
+        (m) => (m.role === 'profesional' || m.role === 'admin') && m.active
+      ),
+    [staffMembers]
+  );
 
-  const [students, setStudents] = useState<StudentPatient[]>(INITIAL_STUDENTS);
+  const [assignProfessionalId, setAssignProfessionalId] = useState<string>(
+    () => professionals[0]?.id || ''
+  );
+
+  // Guardar automáticamente cualquier cambio de turnos, pacientes o asistencias
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(students));
+    } catch {
+      // Ignorar errores de almacenamiento
+    }
+  }, [students]);
+
+  // Guardar automáticamente cambios de horario
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SCHEDULE_STORAGE_KEY,
+        JSON.stringify(scheduleConfig)
+      );
+    } catch {
+      // Ignorar errores de almacenamiento
+    }
+  }, [scheduleConfig]);
+
+  // Sincronizar en vivo entre pestañas abiertas (ej. Recepción y Profesional en la misma PC)
+  useEffect(() => {
+    const handleStorageSync = (e: StorageEvent) => {
+      if (e.key === STUDENTS_STORAGE_KEY && e.newValue) {
+        try {
+          setStudents(JSON.parse(e.newValue));
+        } catch {
+          // Ignorar JSON corrupto
+        }
+      } else if (e.key === SCHEDULE_STORAGE_KEY && e.newValue) {
+        try {
+          setScheduleConfig(JSON.parse(e.newValue));
+        } catch {
+          // Ignorar JSON corrupto
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageSync);
+    return () => window.removeEventListener('storage', handleStorageSync);
+  }, []);
+
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([
     {
       id: 'aud_init',
@@ -69,7 +156,7 @@ export default function App() {
       actorRole: 'admin',
       action: 'SYSTEM_READY',
       target: 'Centro Terapéutico',
-      details: 'Control de acceso multi-personal activo (Ley 25.326 / 26.529).',
+      details: 'Sincronización de turnos y acceso multi-personal activo.',
     },
   ]);
 
@@ -124,7 +211,6 @@ export default function App() {
     [user?.fullName, user?.role]
   );
 
-  // Bloqueo automático por inactividad solo cuando hay sesión iniciada
   useIdleTimeout({
     timeoutMs: 10 * 60 * 1000,
     backgroundMobileTimeoutMs: 60 * 1000,
@@ -149,6 +235,7 @@ export default function App() {
     consentSigned: false,
     day: '' as DayOfWeek | '',
     hour: '',
+    professionalId: professionals[0]?.id || '',
   });
   const [newStudentError, setNewStudentError] = useState<string | null>(null);
 
@@ -198,13 +285,16 @@ export default function App() {
     [activeStudents]
   );
 
-  const getStudentInSlot = useCallback(
-    (day: DayOfWeek, hour: string) => {
-      return activeStudents.find(
-        (s) => s.slot && s.slot.day === day && s.slot.hour === hour
-      );
+  // Devuelve todos los pacientes agendados en ese día y horario (filtrando por profesional si corresponde)
+  const getStudentsInSlot = useCallback(
+    (day: DayOfWeek, hour: string): StudentPatient[] => {
+      return activeStudents.filter((s) => {
+        if (!s.slot || s.slot.day !== day || s.slot.hour !== hour) return false;
+        if (selectedProfessionalFilter === 'ALL') return true;
+        return s.professionalId === selectedProfessionalFilter;
+      });
     },
-    [activeStudents]
+    [activeStudents, selectedProfessionalFilter]
   );
 
   const handleLogin = (staffId: string, passwordInput: string): boolean => {
@@ -212,6 +302,14 @@ export default function App() {
     if (loggedMember) {
       setActiveTab('grid');
       setShowArchived(false);
+      // Si ingresa un profesional, mostrar por defecto su propia agenda (pudiendo cambiar a Todos)
+      if (loggedMember.role === 'profesional') {
+        setSelectedProfessionalFilter(loggedMember.id);
+        setAssignProfessionalId(loggedMember.id);
+      } else {
+        setSelectedProfessionalFilter('ALL');
+        setAssignProfessionalId(professionals[0]?.id || '');
+      }
       appendAuditLog(
         'LOGIN_SUCCESS',
         loggedMember.fullName,
@@ -239,12 +337,10 @@ export default function App() {
     logout();
   };
 
-  // Si ningún usuario ingresó su contraseña todavía, mostrar la Pantalla de Inicio
   if (!user) {
     return <LoginView staffMembers={staffMembers} onLogin={handleLogin} />;
   }
 
-  // Inasistencias con registro auditable
   const handleAddAbsence = (studentId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const target = students.find((s) => s.id === studentId);
@@ -317,7 +413,6 @@ export default function App() {
     }
   };
 
-  // Archivado lógico (Soft-delete en cumplimiento del Art. 18 Ley 26.529)
   const handleArchiveStudent = (studentId: string, reason: string) => {
     if (user.role !== 'admin') return;
     const target = students.find((s) => s.id === studentId);
@@ -351,6 +446,7 @@ export default function App() {
       consentSigned: newStudent.consentSigned,
       day: newStudent.day,
       hour: newStudent.hour,
+      professionalId: newStudent.professionalId,
     });
 
     if (!parsed.success) {
@@ -362,6 +458,8 @@ export default function App() {
 
     const valid = parsed.data;
     const today = new Date().toISOString().split('T')[0];
+    const assignedProf =
+      professionals.find((p) => p.id === valid.professionalId) ?? professionals[0];
 
     const created: StudentPatient = {
       id: 'p_' + Date.now(),
@@ -377,6 +475,8 @@ export default function App() {
         valid.day && valid.hour
           ? { day: valid.day as DayOfWeek, hour: valid.hour }
           : null,
+      professionalId: assignedProf?.id,
+      professionalName: assignedProf?.fullName,
       archivedAt: null,
       attendanceHistory: [],
       history: [],
@@ -386,7 +486,7 @@ export default function App() {
     appendAuditLog(
       'PATIENT_CREATED',
       created.name,
-      'Alta con Consentimiento Informado firmado'
+      `Alta asignada a ${assignedProf?.fullName || 'Centro'}`
     );
 
     setNewStudent({
@@ -398,11 +498,11 @@ export default function App() {
       consentSigned: false,
       day: '',
       hour: '',
+      professionalId: professionals[0]?.id || '',
     });
     setIsStudentModalOpen(false);
   };
 
-  // Agregar asiento clínico inmutable (Append-Only)
   const handleAddClinicalEntry = (
     studentId: string,
     entryData: {
@@ -446,6 +546,8 @@ export default function App() {
   const handleAssignToSlot = (studentId: string) => {
     if (!selectedSlot) return;
     const target = students.find((s) => s.id === studentId);
+    const chosenProf =
+      professionals.find((p) => p.id === assignProfessionalId) ?? professionals[0];
 
     setStudents((prev) =>
       prev.map((s) => {
@@ -453,12 +555,17 @@ export default function App() {
           return {
             ...s,
             slot: { day: selectedSlot.day, hour: selectedSlot.hour },
+            professionalId: chosenProf?.id ?? s.professionalId,
+            professionalName: chosenProf?.fullName ?? s.professionalName,
           };
         }
+        // Solo liberar otro turno en el mismo horario si pertenece al MISMO profesional
         if (
           s.slot &&
           s.slot.day === selectedSlot.day &&
-          s.slot.hour === selectedSlot.hour
+          s.slot.hour === selectedSlot.hour &&
+          chosenProf &&
+          s.professionalId === chosenProf.id
         ) {
           return { ...s, slot: null };
         }
@@ -470,7 +577,7 @@ export default function App() {
       appendAuditLog(
         'SLOT_ASSIGNED',
         target.name,
-        `${selectedSlot.day} ${selectedSlot.hour} hs`
+        `${selectedSlot.day} ${selectedSlot.hour} hs (${chosenProf?.fullName || 'General'})`
       );
     }
     setIsAssignModalOpen(false);
@@ -570,7 +677,16 @@ export default function App() {
         activeStudentsCount={activeStudents.length}
         currentRole={user.role}
         currentUserName={user.fullName}
-        onOpenNewStudentModal={() => setIsStudentModalOpen(true)}
+        onOpenNewStudentModal={() => {
+          setNewStudent((prev) => ({
+            ...prev,
+            professionalId:
+              selectedProfessionalFilter !== 'ALL'
+                ? selectedProfessionalFilter
+                : professionals[0]?.id || '',
+          }));
+          setIsStudentModalOpen(true);
+        }}
         onLockScreen={lockSession}
         onSignOut={handleLogout}
         isCloudConnected={isRealtimeConnected}
@@ -610,7 +726,10 @@ export default function App() {
             timeSlots={timeSlots}
             scheduleConfig={scheduleConfig}
             currentRole={user.role}
-            getStudentInSlot={getStudentInSlot}
+            professionals={professionals}
+            selectedProfessionalFilter={selectedProfessionalFilter}
+            onChangeProfessionalFilter={setSelectedProfessionalFilter}
+            getStudentsInSlot={getStudentsInSlot}
             onSelectStudent={(id) => {
               setSelectedStudentId(id);
               setActiveTab('students');
@@ -619,6 +738,11 @@ export default function App() {
             onRemoveFromSlot={handleRemoveFromSlot}
             onOpenAssignModal={(day, hour) => {
               setSelectedSlot({ day, hour });
+              setAssignProfessionalId(
+                selectedProfessionalFilter !== 'ALL'
+                  ? selectedProfessionalFilter
+                  : professionals[0]?.id || ''
+              );
               setIsAssignModalOpen(true);
             }}
           />
@@ -677,7 +801,7 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL: ASIGNAR PACIENTE A CELDA HORARIA */}
+      {/* MODAL: ASIGNAR PACIENTE A CELDA HORARIA Y PROFESIONAL */}
       {isAssignModalOpen && selectedSlot && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
@@ -696,8 +820,26 @@ export default function App() {
               </button>
             </div>
 
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                <UserCheck className="w-3.5 h-3.5 text-teal-600" />
+                <span>Profesional a cargo del turno:</span>
+              </label>
+              <select
+                value={assignProfessionalId}
+                onChange={(e) => setAssignProfessionalId(e.target.value)}
+                className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-semibold"
+              >
+                {professionals.map((prof) => (
+                  <option key={prof.id} value={prof.id}>
+                    {prof.fullName} — {prof.specialtyOrLicense}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <p className="text-xs text-slate-600">
-              Selecciona un paciente activo para asignarlo a esta celda horaria:
+              Selecciona el paciente para asignarlo a este horario:
             </p>
 
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -718,7 +860,7 @@ export default function App() {
                     </div>
                   </div>
                   <span className="text-xs font-semibold text-teal-600 group-hover:underline">
-                    Asignar
+                    Asignar Turno
                   </span>
                 </div>
               ))}
@@ -736,7 +878,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: REGISTRAR NUEVO PACIENTE CON CONSENTIMIENTO LEY 25.326 */}
+      {/* MODAL: REGISTRAR NUEVO PACIENTE CON PROFESIONAL Y TURNO */}
       {isStudentModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
           <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl space-y-4">
@@ -845,6 +987,25 @@ export default function App() {
                     className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Profesional Tratante Asignado
+                </label>
+                <select
+                  value={newStudent.professionalId}
+                  onChange={(e) =>
+                    setNewStudent({ ...newStudent, professionalId: e.target.value })
+                  }
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+                >
+                  {professionals.map((prof) => (
+                    <option key={prof.id} value={prof.id}>
+                      {prof.fullName} — {prof.specialtyOrLicense}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="border-t pt-3">

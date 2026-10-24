@@ -48,6 +48,8 @@ export interface StudentPatient {
   consentSignedAt?: string;
   absences: number;
   slot: TimeSlotAssignment | null;
+  professionalId?: string;
+  professionalName?: string;
   history: ClinicalHistoryEntry[];
   attendanceHistory: AttendanceRecord[];
   archivedAt?: string | null;
@@ -135,6 +137,8 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
     consentSignedAt: '2026-02-15',
     absences: 2,
     slot: { day: 'Lunes', hour: '09:00' },
+    professionalId: 'staff_profe_1',
+    professionalName: 'Lic. Valeria Méndez',
     archivedAt: null,
     attendanceHistory: [
       {
@@ -212,6 +216,8 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
     consentSignedAt: '2026-02-10',
     absences: 0,
     slot: { day: 'Miércoles', hour: '14:00' },
+    professionalId: 'staff_profe_1',
+    professionalName: 'Lic. Valeria Méndez',
     archivedAt: null,
     attendanceHistory: [],
     history: [
@@ -261,6 +267,8 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
     consentSignedAt: '2026-02-18',
     absences: 3,
     slot: { day: 'Viernes', hour: '11:00' },
+    professionalId: 'staff_profe_2',
+    professionalName: 'Lic. Juan Ignacio Pérez',
     archivedAt: null,
     attendanceHistory: [
       {
@@ -296,7 +304,7 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
         title: 'Control inhibitorio',
         content:
           'Juegos de mesa tipo "Simón Dice" y "Semáforo". Muestra dificultad para respetar la pausa de detención.',
-        authorName: 'Lic. Valeria Méndez (M.N. 4821)',
+        authorName: 'Lic. Juan Ignacio Pérez (M.N. 9104)',
         authorRole: 'profesional',
         createdAt: '2026-02-20T12:00:00Z',
       },
@@ -307,7 +315,7 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
         title: 'Inatención marcada',
         content:
           'Muestra inquietud motora severa. No logra finalizar tareas breves de menos de 5 minutos de duración.',
-        authorName: 'Lic. Valeria Méndez (M.N. 4821)',
+        authorName: 'Lic. Juan Ignacio Pérez (M.N. 9104)',
         authorRole: 'profesional',
         createdAt: '2026-03-06T12:00:00Z',
       },
@@ -324,6 +332,8 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
     consentSignedAt: '2026-02-12',
     absences: 1,
     slot: { day: 'Martes', hour: '16:00' },
+    professionalId: 'staff_profe_2',
+    professionalName: 'Lic. Juan Ignacio Pérez',
     archivedAt: null,
     attendanceHistory: [
       {
@@ -343,7 +353,7 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
         title: 'Posicionamiento y comunicación',
         content:
           'Uso de bipedestador e interacción mediante pulsador en tablet para causa-efecto.',
-        authorName: 'Lic. Valeria Méndez (M.N. 4821)',
+        authorName: 'Lic. Juan Ignacio Pérez (M.N. 9104)',
         authorRole: 'profesional',
         createdAt: '2026-03-03T17:00:00Z',
       },
@@ -354,7 +364,7 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
         title: 'Mayor control cefálico',
         content:
           'Sostiene mirada fija en pantalla interactiva por lapsos continuos de 30 segundos.',
-        authorName: 'Lic. Valeria Méndez (M.N. 4821)',
+        authorName: 'Lic. Juan Ignacio Pérez (M.N. 9104)',
         authorRole: 'profesional',
         createdAt: '2026-03-10T17:00:00Z',
       },
