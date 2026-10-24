@@ -1,20 +1,22 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { ShieldAlert, X, AlertCircle, UserCheck } from 'lucide-react';
+import { ShieldAlert, X, AlertCircle, UserCheck, CalendarDays } from 'lucide-react';
 import {
   CONDITIONS,
   DAYS_OF_WEEK,
   INITIAL_STUDENTS,
+  getStudentSlots,
   type AppRole,
   type AuditLogItem,
   type ClinicalEntryType,
   type DayOfWeek,
   type ScheduleConfig,
   type StudentPatient,
+  type TimeSlotAssignment,
   type TimeSlotItem,
 } from './types/clinical';
 import { NewStudentSchema, ScheduleConfigSchema } from './schemas/clinical.schema';
 import { Header, type ActiveTab } from './components/layout/Header';
-import { ScheduleGrid } from './components/schedule/ScheduleGrid';
+import { ScheduleGrid, type SlotMatchItem } from './components/schedule/ScheduleGrid';
 import { PatientDirectory } from './components/patients/PatientDirectory';
 import { ClinicalDossier } from './components/patients/ClinicalDossier';
 import { AiReportGenerator } from './components/reports/AiReportGenerator';
@@ -106,7 +108,6 @@ export default function App() {
     () => professionals[0]?.id || ''
   );
 
-  // Guardar automáticamente cualquier cambio de turnos, pacientes o asistencias
   useEffect(() => {
     try {
       window.localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(students));
@@ -115,7 +116,6 @@ export default function App() {
     }
   }, [students]);
 
-  // Guardar automáticamente cambios de horario
   useEffect(() => {
     try {
       window.localStorage.setItem(
@@ -127,7 +127,6 @@ export default function App() {
     }
   }, [scheduleConfig]);
 
-  // Sincronizar en vivo entre pestañas abiertas (ej. Recepción y Profesional en la misma PC)
   useEffect(() => {
     const handleStorageSync = (e: StorageEvent) => {
       if (e.key === STUDENTS_STORAGE_KEY && e.newValue) {
@@ -156,7 +155,7 @@ export default function App() {
       actorRole: 'admin',
       action: 'SYSTEM_READY',
       target: 'Centro Terapéutico',
-      details: 'Sincronización de turnos y acceso multi-personal activo.',
+      details: 'Soporte de múltiples turnos semanales por paciente activo.',
     },
   ]);
 
@@ -169,7 +168,6 @@ export default function App() {
     hour: string;
   } | null>(null);
 
-  // PWA Install Prompt
   const [deferredPwaPrompt, setDeferredPwaPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
 
@@ -285,14 +283,24 @@ export default function App() {
     [activeStudents]
   );
 
-  // Devuelve todos los pacientes agendados en ese día y horario (filtrando por profesional si corresponde)
+  // Busca todos los turnos asignados en ese día y horario entre todos los pacientes activos
   const getStudentsInSlot = useCallback(
-    (day: DayOfWeek, hour: string): StudentPatient[] => {
-      return activeStudents.filter((s) => {
-        if (!s.slot || s.slot.day !== day || s.slot.hour !== hour) return false;
-        if (selectedProfessionalFilter === 'ALL') return true;
-        return s.professionalId === selectedProfessionalFilter;
-      });
+    (day: DayOfWeek, hour: string): SlotMatchItem[] => {
+      const matches: SlotMatchItem[] = [];
+      for (const student of activeStudents) {
+        const studentSlots = getStudentSlots(student);
+        for (const sl of studentSlots) {
+          if (sl.day === day && sl.hour === hour) {
+            if (
+              selectedProfessionalFilter === 'ALL' ||
+              sl.professionalId === selectedProfessionalFilter
+            ) {
+              matches.push({ student, slotInfo: sl });
+            }
+          }
+        }
+      }
+      return matches;
     },
     [activeStudents, selectedProfessionalFilter]
   );
@@ -302,7 +310,6 @@ export default function App() {
     if (loggedMember) {
       setActiveTab('grid');
       setShowArchived(false);
-      // Si ingresa un profesional, mostrar por defecto su propia agenda (pudiendo cambiar a Todos)
       if (loggedMember.role === 'profesional') {
         setSelectedProfessionalFilter(loggedMember.id);
         setAssignProfessionalId(loggedMember.id);
@@ -402,14 +409,34 @@ export default function App() {
     appendAuditLog('ABSENCE_RESET', target.name, 'Reinicio de contador de faltas a 0');
   };
 
-  const handleRemoveFromSlot = (studentId: string, e?: React.MouseEvent) => {
+  // Libera únicamente el turno del día y hora indicados, conservando los otros turnos de la semana
+  const handleRemoveFromSlot = (
+    studentId: string,
+    day: DayOfWeek,
+    hour: string,
+    e?: React.MouseEvent
+  ) => {
     if (e) e.stopPropagation();
     const target = students.find((s) => s.id === studentId);
     setStudents((prev) =>
-      prev.map((s) => (s.id === studentId ? { ...s, slot: null } : s))
+      prev.map((s) => {
+        if (s.id !== studentId) return s;
+        const remaining = getStudentSlots(s).filter(
+          (sl) => !(sl.day === day && sl.hour === hour)
+        );
+        return {
+          ...s,
+          slots: remaining,
+          slot: remaining[0] ?? null,
+        };
+      })
     );
     if (target) {
-      appendAuditLog('SLOT_RELEASED', target.name, 'Turno liberado de la grilla');
+      appendAuditLog(
+        'SLOT_RELEASED',
+        target.name,
+        `Turno liberado: ${day} ${hour} hs`
+      );
     }
   };
 
@@ -422,6 +449,7 @@ export default function App() {
           ? {
               ...s,
               slot: null,
+              slots: [],
               archivedAt: new Date().toISOString(),
               archiveReason: reason,
             }
@@ -461,6 +489,16 @@ export default function App() {
     const assignedProf =
       professionals.find((p) => p.id === valid.professionalId) ?? professionals[0];
 
+    const initialSlot: TimeSlotAssignment | null =
+      valid.day && valid.hour
+        ? {
+            day: valid.day as DayOfWeek,
+            hour: valid.hour,
+            professionalId: assignedProf?.id,
+            professionalName: assignedProf?.fullName,
+          }
+        : null;
+
     const created: StudentPatient = {
       id: 'p_' + Date.now(),
       name: valid.name,
@@ -471,10 +509,8 @@ export default function App() {
       consentSigned: valid.consentSigned,
       consentSignedAt: today,
       absences: 0,
-      slot:
-        valid.day && valid.hour
-          ? { day: valid.day as DayOfWeek, hour: valid.hour }
-          : null,
+      slot: initialSlot,
+      slots: initialSlot ? [initialSlot] : [],
       professionalId: assignedProf?.id,
       professionalName: assignedProf?.fullName,
       archivedAt: null,
@@ -543,31 +579,56 @@ export default function App() {
     }
   };
 
+  // SUMA un nuevo turno semanal al paciente sin borrarle los turnos de otros días/horas
   const handleAssignToSlot = (studentId: string) => {
     if (!selectedSlot) return;
     const target = students.find((s) => s.id === studentId);
     const chosenProf =
       professionals.find((p) => p.id === assignProfessionalId) ?? professionals[0];
 
+    const newSlotAssignment: TimeSlotAssignment = {
+      day: selectedSlot.day,
+      hour: selectedSlot.hour,
+      professionalId: chosenProf?.id,
+      professionalName: chosenProf?.fullName,
+    };
+
     setStudents((prev) =>
       prev.map((s) => {
+        const currentSlots = getStudentSlots(s);
+
         if (s.id === studentId) {
+          // Si ya tenía un turno en ese exacto día y hora, actualizar el profesional; si no, agregarlo
+          const withoutSameDayHour = currentSlots.filter(
+            (sl) => !(sl.day === selectedSlot.day && sl.hour === selectedSlot.hour)
+          );
+          const updatedSlots = [...withoutSameDayHour, newSlotAssignment];
           return {
             ...s,
-            slot: { day: selectedSlot.day, hour: selectedSlot.hour },
+            slots: updatedSlots,
+            slot: updatedSlots[0] ?? null,
             professionalId: chosenProf?.id ?? s.professionalId,
             professionalName: chosenProf?.fullName ?? s.professionalName,
           };
         }
-        // Solo liberar otro turno en el mismo horario si pertenece al MISMO profesional
-        if (
-          s.slot &&
-          s.slot.day === selectedSlot.day &&
-          s.slot.hour === selectedSlot.hour &&
-          chosenProf &&
-          s.professionalId === chosenProf.id
-        ) {
-          return { ...s, slot: null };
+
+        // Si otro paciente ocupaba el mismo día, hora y el MISMO profesional, liberar solo ese turno
+        if (chosenProf) {
+          const filteredOther = currentSlots.filter(
+            (sl) =>
+              !(
+                sl.day === selectedSlot.day &&
+                sl.hour === selectedSlot.hour &&
+                sl.professionalId === chosenProf.id
+              )
+          );
+          if (filteredOther.length !== currentSlots.length) {
+            return {
+              ...s,
+              slots: filteredOther,
+              slot: filteredOther[0] ?? null,
+            };
+          }
         }
         return s;
       })
@@ -577,7 +638,9 @@ export default function App() {
       appendAuditLog(
         'SLOT_ASSIGNED',
         target.name,
-        `${selectedSlot.day} ${selectedSlot.hour} hs (${chosenProf?.fullName || 'General'})`
+        `Turno agregado: ${selectedSlot.day} ${selectedSlot.hour} hs (${
+          chosenProf?.fullName || 'General'
+        })`
       );
     }
     setIsAssignModalOpen(false);
@@ -767,6 +830,7 @@ export default function App() {
               currentUserName={user.fullName}
               onAddAbsence={handleAddAbsence}
               onResetAbsences={handleResetAbsences}
+              onRemoveSlot={handleRemoveFromSlot}
               onArchiveStudent={handleArchiveStudent}
               onAddClinicalEntry={handleAddClinicalEntry}
               onGoToReports={() => setActiveTab('reports')}
@@ -801,15 +865,18 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL: ASIGNAR PACIENTE A CELDA HORARIA Y PROFESIONAL */}
+      {/* MODAL: ASIGNAR / SUMAR TURNO SEMANAL A UN PACIENTE */}
       {isAssignModalOpen && selectedSlot && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
-                <h3 className="font-bold text-slate-900">Asignar Turno Semanal</h3>
+                <h3 className="font-bold text-slate-900">
+                  Asignar / Sumar Turno Semanal
+                </h3>
                 <p className="text-xs text-slate-500">
-                  {selectedSlot.day} a las {selectedSlot.hour} hs
+                  {selectedSlot.day} a las {selectedSlot.hour} hs (se suma a los otros
+                  días que ya tenga el paciente)
                 </p>
               </div>
               <button
@@ -823,7 +890,7 @@ export default function App() {
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                 <UserCheck className="w-3.5 h-3.5 text-teal-600" />
-                <span>Profesional a cargo del turno:</span>
+                <span>Profesional a cargo de este turno:</span>
               </label>
               <select
                 value={assignProfessionalId}
@@ -839,31 +906,45 @@ export default function App() {
             </div>
 
             <p className="text-xs text-slate-600">
-              Selecciona el paciente para asignarlo a este horario:
+              Selecciona el paciente para sumarle este turno semanal:
             </p>
 
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {activeStudents.map((student) => (
-                <div
-                  key={student.id}
-                  onClick={() => handleAssignToSlot(student.id)}
-                  className="p-3 bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-lg cursor-pointer transition-all flex items-center justify-between group"
-                >
-                  <div>
-                    <div className="font-bold text-xs text-slate-900">
-                      {student.name}
+              {activeStudents.map((student) => {
+                const currentSlots = getStudentSlots(student);
+                return (
+                  <div
+                    key={student.id}
+                    onClick={() => handleAssignToSlot(student.id)}
+                    className="p-3 bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-lg cursor-pointer transition-all flex items-center justify-between group"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-slate-900 truncate">
+                          {student.name}
+                        </span>
+                        {currentSlots.length > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded shrink-0">
+                            <CalendarDays className="w-2.5 h-2.5" />
+                            {currentSlots.length}{' '}
+                            {currentSlots.length === 1 ? 'turno' : 'turnos'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                        {currentSlots.length > 0
+                          ? `Actuales: ${currentSlots
+                              .map((sl) => `${sl.day.slice(0, 3)} ${sl.hour}`)
+                              .join(', ')}`
+                          : 'Sin turnos asignados aún'}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-slate-500">
-                      {user.role === 'recepcion'
-                        ? `Tutor: ${student.tutorName}`
-                        : student.condition}
-                    </div>
+                    <span className="text-xs font-semibold text-teal-600 group-hover:underline shrink-0">
+                      + Sumar Turno
+                    </span>
                   </div>
-                  <span className="text-xs font-semibold text-teal-600 group-hover:underline">
-                    Asignar Turno
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="pt-2 flex justify-end">
@@ -878,7 +959,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: REGISTRAR NUEVO PACIENTE CON PROFESIONAL Y TURNO */}
+      {/* MODAL: REGISTRAR NUEVO PACIENTE */}
       {isStudentModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
           <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl space-y-4">
@@ -1010,7 +1091,7 @@ export default function App() {
 
               <div className="border-t pt-3">
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-                  Asignar Turno Inicial (Opcional)
+                  Asignar Primer Turno (Luego podés sumarle más desde la grilla)
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <select

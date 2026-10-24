@@ -19,6 +19,13 @@ export const ClinicalEntryTypeSchema = z.enum([
   'Enmienda',
 ]);
 
+export const TimeSlotAssignmentSchema = z.object({
+  day: DayOfWeekSchema,
+  hour: z.string(),
+  professionalId: z.string().optional(),
+  professionalName: z.string().optional(),
+});
+
 export const NewStudentSchema = z.object({
   name: z
     .string()
@@ -126,12 +133,8 @@ export const BackupPayloadSchema = z.object({
       consentSigned: z.boolean(),
       consentSignedAt: z.string().optional(),
       absences: z.number().int().min(0),
-      slot: z
-        .object({
-          day: DayOfWeekSchema,
-          hour: z.string(),
-        })
-        .nullable(),
+      slot: TimeSlotAssignmentSchema.nullable(),
+      slots: z.array(TimeSlotAssignmentSchema).optional(),
       professionalId: z.string().optional(),
       professionalName: z.string().optional(),
       archivedAt: z.string().nullable().optional(),

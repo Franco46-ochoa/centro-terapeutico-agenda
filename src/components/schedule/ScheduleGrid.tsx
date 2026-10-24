@@ -1,14 +1,21 @@
 import React, { useState } from 'react';
-import { Clock, Plus, Trash2, XCircle, Lock, UserCheck } from 'lucide-react';
+import { Clock, Plus, Trash2, XCircle, Lock, UserCheck, CalendarDays } from 'lucide-react';
 import {
   getConditionColor,
+  getStudentSlots,
   type AppRole,
   type DayOfWeek,
   type ScheduleConfig,
   type StudentPatient,
+  type TimeSlotAssignment,
   type TimeSlotItem,
 } from '../../types/clinical';
 import type { StaffMember } from '../../hooks/useAuth';
+
+export interface SlotMatchItem {
+  student: StudentPatient;
+  slotInfo: TimeSlotAssignment;
+}
 
 interface ScheduleGridProps {
   activeDays: DayOfWeek[];
@@ -18,10 +25,15 @@ interface ScheduleGridProps {
   professionals: StaffMember[];
   selectedProfessionalFilter: string;
   onChangeProfessionalFilter: (profId: string) => void;
-  getStudentsInSlot: (day: DayOfWeek, hour: string) => StudentPatient[];
+  getStudentsInSlot: (day: DayOfWeek, hour: string) => SlotMatchItem[];
   onSelectStudent: (studentId: string) => void;
   onAddAbsence: (studentId: string, e?: React.MouseEvent) => void;
-  onRemoveFromSlot: (studentId: string, e?: React.MouseEvent) => void;
+  onRemoveFromSlot: (
+    studentId: string,
+    day: DayOfWeek,
+    hour: string,
+    e?: React.MouseEvent
+  ) => void;
   onOpenAssignModal: (day: DayOfWeek, hour: string) => void;
 }
 
@@ -45,9 +57,9 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
   const canViewClinical = currentRole === 'admin' || currentRole === 'profesional';
 
   const renderSlotCell = (day: DayOfWeek, slot: TimeSlotItem) => {
-    const slotStudents = getStudentsInSlot(day, slot.id);
+    const slotMatches = getStudentsInSlot(day, slot.id);
 
-    if (slotStudents.length === 0) {
+    if (slotMatches.length === 0) {
       return (
         <button
           onClick={() => onOpenAssignModal(day, slot.id)}
@@ -62,106 +74,118 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
     return (
       <div className="space-y-2 h-full flex flex-col justify-between">
         <div className="space-y-1.5">
-          {slotStudents.map((student) => (
-            <div
-              key={student.id}
-              onClick={() => onSelectStudent(student.id)}
-              className={`p-2.5 rounded-lg border flex flex-col justify-between cursor-pointer transition-all hover:shadow-md relative group ${
-                student.absences >= 3
-                  ? 'bg-rose-50 border-rose-300 hover:border-rose-400'
-                  : student.absences > 0
-                    ? 'bg-amber-50 border-amber-300 hover:border-amber-400'
-                    : 'bg-teal-50 border-teal-200 hover:border-teal-300'
-              }`}
-            >
-              <div>
-                <div className="flex items-start justify-between gap-1 mb-1">
-                  <span
-                    className="font-bold text-xs text-slate-900 truncate"
-                    title={student.name}
-                  >
-                    {student.name}
-                  </span>
-                  <span
-                    className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex items-center shrink-0 ${
-                      student.absences >= 3
-                        ? 'bg-rose-600 text-white animate-pulse'
-                        : student.absences > 0
-                          ? 'bg-amber-500 text-white'
-                          : 'bg-emerald-600 text-white'
-                    }`}
-                  >
-                    <span>{student.absences} Faltas</span>
-                  </span>
-                </div>
+          {slotMatches.map(({ student, slotInfo }) => {
+            const totalWeeklySlots = getStudentSlots(student).length;
+            const profLabel = slotInfo.professionalName || student.professionalName;
 
-                <div className="text-[11px] text-slate-600 mb-1">
-                  {student.age} años • {student.tutorName}
-                </div>
-
-                {student.professionalName && (
-                  <div className="text-[10px] font-semibold text-teal-800 bg-white/80 border border-teal-200/80 rounded px-1.5 py-0.5 mb-1 truncate flex items-center gap-1">
-                    <UserCheck className="w-3 h-3 text-teal-600 shrink-0" />
-                    <span className="truncate">{student.professionalName}</span>
-                  </div>
-                )}
-
-                <div className="mt-1">
-                  {canViewClinical ? (
+            return (
+              <div
+                key={`${student.id}-${day}-${slot.id}-${slotInfo.professionalId || ''}`}
+                onClick={() => onSelectStudent(student.id)}
+                className={`p-2.5 rounded-lg border flex flex-col justify-between cursor-pointer transition-all hover:shadow-md relative group ${
+                  student.absences >= 3
+                    ? 'bg-rose-50 border-rose-300 hover:border-rose-400'
+                    : student.absences > 0
+                      ? 'bg-amber-50 border-amber-300 hover:border-amber-400'
+                      : 'bg-teal-50 border-teal-200 hover:border-teal-300'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-1 mb-1">
                     <span
-                      className={`inline-block text-[10px] px-1.5 py-0.5 rounded border font-medium truncate max-w-full ${getConditionColor(
-                        student.condition
-                      )}`}
+                      className="font-bold text-xs text-slate-900 truncate"
+                      title={student.name}
                     >
-                      {student.condition}
+                      {student.name}
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200">
-                      <Lock className="w-2.5 h-2.5" /> Dato Clínico Protegido
+                    <span
+                      className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex items-center shrink-0 ${
+                        student.absences >= 3
+                          ? 'bg-rose-600 text-white animate-pulse'
+                          : student.absences > 0
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-emerald-600 text-white'
+                      }`}
+                    >
+                      <span>{student.absences} Faltas</span>
                     </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1">
+                    <span className="truncate">{student.age} años</span>
+                    {totalWeeklySlots > 1 && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[10px] font-bold text-teal-800 bg-teal-100/80 px-1.5 py-0.5 rounded"
+                        title="Cantidad de sesiones por semana de este paciente"
+                      >
+                        <CalendarDays className="w-2.5 h-2.5" />
+                        {totalWeeklySlots}x sem
+                      </span>
+                    )}
+                  </div>
+
+                  {profLabel && (
+                    <div className="text-[10px] font-semibold text-teal-800 bg-white/80 border border-teal-200/80 rounded px-1.5 py-0.5 mb-1 truncate flex items-center gap-1">
+                      <UserCheck className="w-3 h-3 text-teal-600 shrink-0" />
+                      <span className="truncate">{profLabel}</span>
+                    </div>
                   )}
+
+                  <div className="mt-1">
+                    {canViewClinical ? (
+                      <span
+                        className={`inline-block text-[10px] px-1.5 py-0.5 rounded border font-medium truncate max-w-full ${getConditionColor(
+                          student.condition
+                        )}`}
+                      >
+                        {student.condition}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200">
+                        <Lock className="w-2.5 h-2.5" /> Dato Clínico Protegido
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-2 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="text-teal-700 font-medium hover:underline">
+                    {canViewClinical ? 'Ver Historia Clínica' : 'Ver Ficha Turno'}
+                  </span>
+
+                  <div
+                    className="flex items-center space-x-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={(e) => onAddAbsence(student.id, e)}
+                      title="Registrar Inasistencia Auditable"
+                      className="p-1 hover:bg-rose-100 text-rose-600 rounded transition-colors cursor-pointer"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      onClick={(e) => onRemoveFromSlot(student.id, day, slot.id, e)}
+                      title={`Liberar solo el turno del ${day} ${slot.id} hs`}
+                      className="p-1 hover:bg-slate-200 text-slate-600 rounded transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <div className="mt-2 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
-                <span className="text-teal-700 font-medium hover:underline">
-                  {canViewClinical ? 'Ver Historia Clínica' : 'Ver Ficha Turno'}
-                </span>
-
-                <div
-                  className="flex items-center space-x-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    onClick={(e) => onAddAbsence(student.id, e)}
-                    title="Registrar Inasistencia Auditable"
-                    className="p-1 hover:bg-rose-100 text-rose-600 rounded transition-colors cursor-pointer"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    onClick={(e) => onRemoveFromSlot(student.id, e)}
-                    title="Liberar este turno"
-                    className="p-1 hover:bg-slate-200 text-slate-600 rounded transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* En vista general ("ALL") permite agregar otro turno simultáneo con otro profesional */}
-        {selectedProfessionalFilter === 'ALL' && (
-          <button
-            onClick={() => onOpenAssignModal(day, slot.id)}
-            className="w-full py-1 border border-dashed border-slate-300 rounded text-[10px] text-slate-500 hover:text-teal-700 hover:border-teal-400 hover:bg-teal-50/40 flex items-center justify-center gap-1 transition cursor-pointer"
-          >
-            <Plus className="w-3 h-3" /> Otro consultorio
-          </button>
-        )}
+        {/* Botón para sumar otro turno en la misma hora (otro consultorio/profesional) */}
+        <button
+          onClick={() => onOpenAssignModal(day, slot.id)}
+          className="w-full py-1 border border-dashed border-slate-300 rounded text-[10px] text-slate-500 hover:text-teal-700 hover:border-teal-400 hover:bg-teal-50/40 flex items-center justify-center gap-1 transition cursor-pointer"
+        >
+          <Plus className="w-3 h-3" /> Agregar turno en este horario
+        </button>
       </div>
     );
   };
@@ -172,8 +196,9 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
         <div>
           <h2 className="text-lg font-bold text-slate-900">Agenda de Turnos</h2>
           <p className="text-xs text-slate-500">
-            Días configurados: {activeDays.join(', ')} ({scheduleConfig.startHour}:00 a{' '}
-            {scheduleConfig.endHour}:00 hs - módulos de {scheduleConfig.slotDuration} min).
+            Días: {activeDays.join(', ')} ({scheduleConfig.startHour}:00 a{' '}
+            {scheduleConfig.endHour}:00 hs • módulos de {scheduleConfig.slotDuration}{' '}
+            min). Podés asignar 2, 3 o más turnos por semana a cada paciente.
           </p>
         </div>
 

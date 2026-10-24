@@ -13,6 +13,8 @@ export type AttendanceEventType =
 export interface TimeSlotAssignment {
   day: DayOfWeek;
   hour: string;
+  professionalId?: string;
+  professionalName?: string;
 }
 
 export interface ClinicalHistoryEntry {
@@ -48,6 +50,7 @@ export interface StudentPatient {
   consentSignedAt?: string;
   absences: number;
   slot: TimeSlotAssignment | null;
+  slots?: TimeSlotAssignment[];
   professionalId?: string;
   professionalName?: string;
   history: ClinicalHistoryEntry[];
@@ -76,6 +79,31 @@ export interface AuditLogItem {
 export interface TimeSlotItem {
   id: string;
   label: string;
+}
+
+/**
+ * Helper que devuelve siempre la lista de turnos semanales de un paciente,
+ * migrando automáticamente si solo tenía un único `slot` antiguo.
+ */
+export function getStudentSlots(student: StudentPatient): TimeSlotAssignment[] {
+  if (Array.isArray(student.slots) && student.slots.length > 0) {
+    return student.slots.map((sl) => ({
+      ...sl,
+      professionalId: sl.professionalId ?? student.professionalId,
+      professionalName: sl.professionalName ?? student.professionalName,
+    }));
+  }
+  if (student.slot) {
+    return [
+      {
+        day: student.slot.day,
+        hour: student.slot.hour,
+        professionalId: student.slot.professionalId ?? student.professionalId,
+        professionalName: student.slot.professionalName ?? student.professionalName,
+      },
+    ];
+  }
+  return [];
 }
 
 export const DAYS_OF_WEEK: DayOfWeek[] = [
@@ -136,7 +164,26 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
     consentSigned: true,
     consentSignedAt: '2026-02-15',
     absences: 2,
-    slot: { day: 'Lunes', hour: '09:00' },
+    slot: {
+      day: 'Lunes',
+      hour: '09:00',
+      professionalId: 'staff_profe_1',
+      professionalName: 'Lic. Valeria Méndez',
+    },
+    slots: [
+      {
+        day: 'Lunes',
+        hour: '09:00',
+        professionalId: 'staff_profe_1',
+        professionalName: 'Lic. Valeria Méndez',
+      },
+      {
+        day: 'Jueves',
+        hour: '09:00',
+        professionalId: 'staff_profe_2',
+        professionalName: 'Lic. Juan Ignacio Pérez',
+      },
+    ],
     professionalId: 'staff_profe_1',
     professionalName: 'Lic. Valeria Méndez',
     archivedAt: null,
@@ -215,7 +262,20 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
     consentSigned: true,
     consentSignedAt: '2026-02-10',
     absences: 0,
-    slot: { day: 'Miércoles', hour: '14:00' },
+    slot: {
+      day: 'Miércoles',
+      hour: '14:00',
+      professionalId: 'staff_profe_1',
+      professionalName: 'Lic. Valeria Méndez',
+    },
+    slots: [
+      {
+        day: 'Miércoles',
+        hour: '14:00',
+        professionalId: 'staff_profe_1',
+        professionalName: 'Lic. Valeria Méndez',
+      },
+    ],
     professionalId: 'staff_profe_1',
     professionalName: 'Lic. Valeria Méndez',
     archivedAt: null,
@@ -266,7 +326,26 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
     consentSigned: true,
     consentSignedAt: '2026-02-18',
     absences: 3,
-    slot: { day: 'Viernes', hour: '11:00' },
+    slot: {
+      day: 'Viernes',
+      hour: '11:00',
+      professionalId: 'staff_profe_2',
+      professionalName: 'Lic. Juan Ignacio Pérez',
+    },
+    slots: [
+      {
+        day: 'Martes',
+        hour: '11:00',
+        professionalId: 'staff_profe_1',
+        professionalName: 'Lic. Valeria Méndez',
+      },
+      {
+        day: 'Viernes',
+        hour: '11:00',
+        professionalId: 'staff_profe_2',
+        professionalName: 'Lic. Juan Ignacio Pérez',
+      },
+    ],
     professionalId: 'staff_profe_2',
     professionalName: 'Lic. Juan Ignacio Pérez',
     archivedAt: null,
@@ -331,7 +410,20 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
     consentSigned: true,
     consentSignedAt: '2026-02-12',
     absences: 1,
-    slot: { day: 'Martes', hour: '16:00' },
+    slot: {
+      day: 'Martes',
+      hour: '16:00',
+      professionalId: 'staff_profe_2',
+      professionalName: 'Lic. Juan Ignacio Pérez',
+    },
+    slots: [
+      {
+        day: 'Martes',
+        hour: '16:00',
+        professionalId: 'staff_profe_2',
+        professionalName: 'Lic. Juan Ignacio Pérez',
+      },
+    ],
     professionalId: 'staff_profe_2',
     professionalName: 'Lic. Juan Ignacio Pérez',
     archivedAt: null,
