@@ -487,6 +487,22 @@ export function useAuth() {
     [user]
   );
 
+  const syncStaffMembersFromCloud = useCallback((remoteList: StaffMember[]) => {
+    if (!Array.isArray(remoteList) || remoteList.length === 0) return;
+    saveStaffMembers(remoteList);
+    setStaffMembers(remoteList);
+    setUser((prevUser) => {
+      if (!prevUser) return null;
+      const updatedSelf = remoteList.find(
+        (m) => m.id === prevUser.id && m.active
+      );
+      if (!updatedSelf || updatedSelf.subscriptionStatus === 'pausada') {
+        return null;
+      }
+      return buildSessionFromMember(updatedSelf, remoteList);
+    });
+  }, []);
+
   return {
     user,
     isLocked,
@@ -501,5 +517,6 @@ export function useAuth() {
     toggleSubscriptionStatus,
     updateStaffPassword,
     removeStaffMember,
+    syncStaffMembersFromCloud,
   };
 }

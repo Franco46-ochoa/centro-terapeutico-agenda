@@ -15,14 +15,14 @@ export function useRealtimeCenterData(onRemoteChange?: () => void) {
       .channel('center-agenda-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'patients' },
+        { event: '*', schema: 'public', table: 'app_cloud_store' },
         () => {
           onRemoteChange?.();
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'clinical_entries' },
+        { event: '*', schema: 'public', table: 'patients' },
         () => {
           onRemoteChange?.();
         }

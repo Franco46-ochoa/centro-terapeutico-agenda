@@ -32,6 +32,7 @@ import {
 } from './hooks/useAuth';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { useRealtimeCenterData } from './hooks/useRealtimeCenterData';
+import { fetchCloudState, pushCloudState } from './lib/cloudSync';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -84,8 +85,8 @@ export default function App() {
     toggleSubscriptionStatus,
     updateStaffPassword,
     removeStaffMember,
+    syncStaffMembersFromCloud,
   } = useAuth();
-  const { isRealtimeConnected } = useRealtimeCenterData();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('grid');
   const [students, setStudents] = useState<StudentPatient[]>(() =>
@@ -94,6 +95,52 @@ export default function App() {
   const [schedulesByProf, setSchedulesByProf] = useState<
     Record<string, ScheduleConfig>
   >(() => loadSchedulesMap());
+  const [isApplyingRemote, setIsApplyingRemote] = useState(false);
+  const [hasLoadedInitialCloud, setHasLoadedInitialCloud] = useState(false);
+
+  const pullFromCloud = useCallback(async () => {
+    const remote = await fetchCloudState();
+    if (remote) {
+      setIsApplyingRemote(true);
+      if (Array.isArray(remote.staffMembers) && remote.staffMembers.length > 0) {
+        syncStaffMembersFromCloud(remote.staffMembers);
+      }
+      if (Array.isArray(remote.students) && remote.students.length > 0) {
+        setStudents(remote.students);
+      }
+      if (remote.schedulesByProf) {
+        setSchedulesByProf(remote.schedulesByProf);
+      }
+      setTimeout(() => setIsApplyingRemote(false), 150);
+    }
+    setHasLoadedInitialCloud(true);
+  }, [syncStaffMembersFromCloud]);
+
+  const { isRealtimeConnected } = useRealtimeCenterData(pullFromCloud);
+
+  // Al abrir la app (en PC o en Celular, incluso en la pantalla de Login), descargar estado de la nube
+  useEffect(() => {
+    pullFromCloud();
+    const interval = window.setInterval(pullFromCloud, 6000);
+    return () => window.clearInterval(interval);
+  }, [pullFromCloud]);
+
+  // Cada vez que cambie un usuario, contraseña, paciente, turno u horario, sincronizar a la nube
+  useEffect(() => {
+    if (!hasLoadedInitialCloud || isApplyingRemote) return;
+    pushCloudState({
+      staffMembers,
+      students,
+      schedulesByProf,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [
+    staffMembers,
+    students,
+    schedulesByProf,
+    hasLoadedInitialCloud,
+    isApplyingRemote,
+  ]);
 
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');

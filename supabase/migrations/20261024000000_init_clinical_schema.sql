@@ -283,3 +283,18 @@ CREATE POLICY "audit_logs_select_admin_only" ON public.audit_logs
     AND public.current_user_role() = 'admin'
     AND public.has_mfa_aal2()
   );
+
+-- 9. Tabla de Sincronización Directa Multi-Dispositivo (PC + Celular)
+CREATE TABLE IF NOT EXISTS public.app_cloud_store (
+  id TEXT PRIMARY KEY,
+  payload JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.app_cloud_store ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "app_cloud_store_sync_policy" ON public.app_cloud_store
+  FOR ALL TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
+
