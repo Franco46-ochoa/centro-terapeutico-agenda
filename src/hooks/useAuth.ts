@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import type { AppRole } from '../types/clinical';
 
+export type SubscriptionStatus = 'activa' | 'pausada';
+
 export interface StaffMember {
   id: string;
   fullName: string;
@@ -8,6 +10,9 @@ export interface StaffMember {
   role: AppRole;
   password: string;
   active: boolean;
+  subscriptionStatus: SubscriptionStatus;
+  linkedProfessionalId?: string;
+  linkedProfessionalName?: string;
 }
 
 export interface SessionUser {
@@ -15,7 +20,19 @@ export interface SessionUser {
   fullName: string;
   role: AppRole;
   mfaVerified: boolean;
+  /**
+   * ID del profesional dueño de la agenda/consultorio:
+   * - Si inicia sesión un 'profesional', es su propio id.
+   * - Si inicia sesión una 'recepcion', es el linkedProfessionalId del profesional al que asiste.
+   * - Si inicia sesión un 'admin', puede inspeccionar o gestionar usuarios.
+   */
+  workspaceOwnerId: string;
+  workspaceOwnerName: string;
 }
+
+export type LoginResult =
+  | { ok: true; member: StaffMember }
+  | { ok: false; reason: 'invalid_credentials' | 'subscription_paused'; message: string };
 
 export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
   {
@@ -25,6 +42,7 @@ export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
     role: 'profesional',
     password: 'profe2026',
     active: true,
+    subscriptionStatus: 'activa',
   },
   {
     id: 'staff_profe_2',
@@ -33,26 +51,31 @@ export const INITIAL_STAFF_MEMBERS: StaffMember[] = [
     role: 'profesional',
     password: 'juan2026',
     active: true,
+    subscriptionStatus: 'activa',
   },
   {
     id: 'staff_admin_1',
-    fullName: 'Dr. Martín Quiroga',
-    specialtyOrLicense: 'Dirección Médica',
+    fullName: 'Administrador de Usuarios',
+    specialtyOrLicense: 'Gestión Comercial y Suscripciones',
     role: 'admin',
     password: 'admin2026',
     active: true,
+    subscriptionStatus: 'activa',
   },
   {
     id: 'staff_recep_1',
-    fullName: 'Sofía Pereyra',
-    specialtyOrLicense: 'Secretaría Turno Mañana',
+    fullName: 'Sofía Pereyra (Secretaria)',
+    specialtyOrLicense: 'Recepción vinculada a Lic. Valeria Méndez',
     role: 'recepcion',
     password: 'recep2026',
     active: true,
+    subscriptionStatus: 'activa',
+    linkedProfessionalId: 'staff_profe_1',
+    linkedProfessionalName: 'Lic. Valeria Méndez',
   },
 ];
 
-const STAFF_STORAGE_KEY = 'ct_staff_members_v1';
+const STAFF_STORAGE_KEY = 'ct_staff_members_v2';
 
 function loadStaffMembers(): StaffMember[] {
   try {
@@ -60,7 +83,10 @@ function loadStaffMembers(): StaffMember[] {
     if (!raw) return [...INITIAL_STAFF_MEMBERS];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+      return parsed.map((m: StaffMember) => ({
+        ...m,
+        subscriptionStatus: m.subscriptionStatus || 'activa',
+      }));
     }
     return [...INITIAL_STAFF_MEMBERS];
   } catch {
@@ -72,7 +98,7 @@ function saveStaffMembers(list: StaffMember[]) {
   try {
     window.localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(list));
   } catch {
-    // Ignorar errores de cuota o modo privado
+    // Ignorar errores de almacenamiento restringido
   }
 }
 
@@ -84,11 +110,58 @@ export function useAuth() {
   );
 
   const loginWithStaffPassword = useCallback(
-    (staffId: string, passwordInput: string): StaffMember | null => {
+    (staffId: string, passwordInput: string): LoginResult => {
       const found = staffMembers.find((s) => s.id === staffId && s.active);
       if (!found || found.password !== passwordInput) {
-        return null;
+        return {
+          ok: false,
+          reason: 'invalid_credentials',
+          message:
+            'Contraseña incorrecta para el usuario seleccionado. Verifique su clave asignada.',
+        };
       }
+
+      // Verificar estado de suscripción del profesional (o del profesional vinculado si es recepcionista)
+      if (found.role === 'profesional' && found.subscriptionStatus === 'pausada') {
+        return {
+          ok: false,
+          reason: 'subscription_paused',
+          message:
+            'Su suscripción mensual se encuentra pausada o pendiente de renovación. Contacte al Administrador de Usuarios para reactivar su agenda.',
+        };
+      }
+
+      if (found.role === 'recepcion') {
+        const ownerProf = staffMembers.find(
+          (p) => p.id === found.linkedProfessionalId && p.active
+        );
+        if (
+          found.subscriptionStatus === 'pausada' ||
+          (ownerProf && ownerProf.subscriptionStatus === 'pausada')
+        ) {
+          return {
+            ok: false,
+            reason: 'subscription_paused',
+            message:
+              'La suscripción del profesional titular se encuentra pausada. Contacte al Administrador de Usuarios.',
+          };
+        }
+      }
+
+      const ownerProf =
+        found.role === 'recepcion'
+          ? staffMembers.find((p) => p.id === found.linkedProfessionalId)
+          : found;
+
+      const workspaceOwnerId =
+        found.role === 'recepcion'
+          ? found.linkedProfessionalId || 'staff_profe_1'
+          : found.id;
+
+      const workspaceOwnerName =
+        found.role === 'recepcion'
+          ? ownerProf?.fullName || found.linkedProfessionalName || 'Profesional Titular'
+          : found.fullName;
 
       const displayLabel = found.specialtyOrLicense
         ? `${found.fullName} (${found.specialtyOrLicense})`
@@ -99,9 +172,11 @@ export function useAuth() {
         fullName: displayLabel,
         role: found.role,
         mfaVerified: found.role !== 'recepcion',
+        workspaceOwnerId,
+        workspaceOwnerName,
       });
       setIsLocked(false);
-      return found;
+      return { ok: true, member: found };
     },
     [staffMembers]
   );
@@ -136,19 +211,35 @@ export function useAuth() {
       specialtyOrLicense: string;
       role: AppRole;
       password: string;
+      linkedProfessionalId?: string;
     }): StaffMember | null => {
       if (!user || user.role !== 'admin') return null;
       const fullName = newMember.fullName.trim();
       const password = newMember.password.trim();
       if (fullName.length < 2 || password.length < 4) return null;
 
+      const linkedProf =
+        newMember.role === 'recepcion' && newMember.linkedProfessionalId
+          ? staffMembers.find((p) => p.id === newMember.linkedProfessionalId)
+          : undefined;
+
+      const specialtyLabel =
+        newMember.role === 'recepcion' && linkedProf
+          ? `Recepción vinculada a ${linkedProf.fullName}`
+          : newMember.specialtyOrLicense.trim() || 'Profesional Titular';
+
       const created: StaffMember = {
         id: 'staff_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
         fullName,
-        specialtyOrLicense: newMember.specialtyOrLicense.trim() || 'Personal del Centro',
+        specialtyOrLicense: specialtyLabel,
         role: newMember.role,
         password,
         active: true,
+        subscriptionStatus: 'activa',
+        linkedProfessionalId:
+          newMember.role === 'recepcion' ? linkedProf?.id : undefined,
+        linkedProfessionalName:
+          newMember.role === 'recepcion' ? linkedProf?.fullName : undefined,
       };
 
       setStaffMembers((prev) => {
@@ -157,6 +248,27 @@ export function useAuth() {
         return next;
       });
       return created;
+    },
+    [user, staffMembers]
+  );
+
+  const toggleSubscriptionStatus = useCallback(
+    (staffId: string): SubscriptionStatus | null => {
+      if (!user || user.role !== 'admin') return null;
+      let updatedStatus: SubscriptionStatus = 'activa';
+
+      setStaffMembers((prev) => {
+        const next = prev.map((s) => {
+          if (s.id === staffId) {
+            updatedStatus = s.subscriptionStatus === 'activa' ? 'pausada' : 'activa';
+            return { ...s, subscriptionStatus: updatedStatus };
+          }
+          return s;
+        });
+        saveStaffMembers(next);
+        return next;
+      });
+      return updatedStatus;
     },
     [user]
   );
@@ -182,7 +294,6 @@ export function useAuth() {
   const removeStaffMember = useCallback(
     (staffId: string): boolean => {
       if (!user || user.role !== 'admin') return false;
-      // Evitar que el admin elimine su propio usuario en sesión activa
       if (staffId === user.id) return false;
 
       setStaffMembers((prev) => {
@@ -204,6 +315,7 @@ export function useAuth() {
     lockSession,
     unlockSession,
     addStaffMember,
+    toggleSubscriptionStatus,
     updateStaffPassword,
     removeStaffMember,
   };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, Plus, Trash2, XCircle, Lock, UserCheck, CalendarDays } from 'lucide-react';
+import { Clock, Plus, Trash2, XCircle, Lock, CalendarDays, ShieldCheck } from 'lucide-react';
 import {
   getConditionColor,
   getStudentSlots,
@@ -10,7 +10,6 @@ import {
   type TimeSlotAssignment,
   type TimeSlotItem,
 } from '../../types/clinical';
-import type { StaffMember } from '../../hooks/useAuth';
 
 export interface SlotMatchItem {
   student: StudentPatient;
@@ -22,9 +21,7 @@ interface ScheduleGridProps {
   timeSlots: TimeSlotItem[];
   scheduleConfig: ScheduleConfig;
   currentRole: AppRole;
-  professionals: StaffMember[];
-  selectedProfessionalFilter: string;
-  onChangeProfessionalFilter: (profId: string) => void;
+  workspaceOwnerName: string;
   getStudentsInSlot: (day: DayOfWeek, hour: string) => SlotMatchItem[];
   onSelectStudent: (studentId: string) => void;
   onAddAbsence: (studentId: string, e?: React.MouseEvent) => void;
@@ -42,9 +39,7 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
   timeSlots,
   scheduleConfig,
   currentRole,
-  professionals,
-  selectedProfessionalFilter,
-  onChangeProfessionalFilter,
+  workspaceOwnerName,
   getStudentsInSlot,
   onSelectStudent,
   onAddAbsence,
@@ -74,13 +69,12 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
     return (
       <div className="space-y-2 h-full flex flex-col justify-between">
         <div className="space-y-1.5">
-          {slotMatches.map(({ student, slotInfo }) => {
+          {slotMatches.map(({ student }) => {
             const totalWeeklySlots = getStudentSlots(student).length;
-            const profLabel = slotInfo.professionalName || student.professionalName;
 
             return (
               <div
-                key={`${student.id}-${day}-${slot.id}-${slotInfo.professionalId || ''}`}
+                key={`${student.id}-${day}-${slot.id}`}
                 onClick={() => onSelectStudent(student.id)}
                 className={`p-2.5 rounded-lg border flex flex-col justify-between cursor-pointer transition-all hover:shadow-md relative group ${
                   student.absences >= 3
@@ -124,13 +118,6 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
                     )}
                   </div>
 
-                  {profLabel && (
-                    <div className="text-[10px] font-semibold text-teal-800 bg-white/80 border border-teal-200/80 rounded px-1.5 py-0.5 mb-1 truncate flex items-center gap-1">
-                      <UserCheck className="w-3 h-3 text-teal-600 shrink-0" />
-                      <span className="truncate">{profLabel}</span>
-                    </div>
-                  )}
-
                   <div className="mt-1">
                     {canViewClinical ? (
                       <span
@@ -142,7 +129,7 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200">
-                        <Lock className="w-2.5 h-2.5" /> Dato Clínico Protegido
+                        <Lock className="w-2.5 h-2.5" /> Dato Clínico Reservado
                       </span>
                     )}
                   </div>
@@ -178,14 +165,6 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
             );
           })}
         </div>
-
-        {/* Botón para sumar otro turno en la misma hora (otro consultorio/profesional) */}
-        <button
-          onClick={() => onOpenAssignModal(day, slot.id)}
-          className="w-full py-1 border border-dashed border-slate-300 rounded text-[10px] text-slate-500 hover:text-teal-700 hover:border-teal-400 hover:bg-teal-50/40 flex items-center justify-center gap-1 transition cursor-pointer"
-        >
-          <Plus className="w-3 h-3" /> Agregar turno en este horario
-        </button>
       </div>
     );
   };
@@ -194,46 +173,33 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">Agenda de Turnos</h2>
-          <p className="text-xs text-slate-500">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg font-bold text-slate-900">
+              Agenda Personal de Turnos — {workspaceOwnerName}
+            </h2>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-teal-50 text-teal-800 border border-teal-200 px-2.5 py-0.5 rounded-full">
+              <ShieldCheck className="w-3.5 h-3.5 text-teal-600" /> Agenda Privada Aislada
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
             Días: {activeDays.join(', ')} ({scheduleConfig.startHour}:00 a{' '}
             {scheduleConfig.endHour}:00 hs • módulos de {scheduleConfig.slotDuration}{' '}
             min). Podés asignar 2, 3 o más turnos por semana a cada paciente.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Filtro por Profesional */}
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
-            <UserCheck className="w-4 h-4 text-teal-600 shrink-0" />
-            <span className="text-xs font-semibold text-slate-600">Agenda de:</span>
-            <select
-              value={selectedProfessionalFilter}
-              onChange={(e) => onChangeProfessionalFilter(e.target.value)}
-              className="text-xs font-bold text-slate-900 bg-transparent outline-none cursor-pointer"
-            >
-              <option value="ALL">Todos los Profesionales ({professionals.length})</option>
-              {professionals.map((prof) => (
-                <option key={prof.id} value={prof.id}>
-                  {prof.fullName} ({prof.specialtyOrLicense})
-                </option>
-              ))}
-            </select>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+          <div className="flex items-center space-x-1.5">
+            <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+            <span>Sin faltas</span>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-            <div className="flex items-center space-x-1.5">
-              <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-              <span>Sin faltas</span>
-            </div>
-            <div className="flex items-center space-x-1.5">
-              <span className="w-3 h-3 rounded-full bg-amber-500"></span>
-              <span>1-2 Faltas</span>
-            </div>
-            <div className="flex items-center space-x-1.5">
-              <span className="w-3 h-3 rounded-full bg-rose-500"></span>
-              <span>3+ Faltas</span>
-            </div>
+          <div className="flex items-center space-x-1.5">
+            <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+            <span>1-2 Faltas</span>
+          </div>
+          <div className="flex items-center space-x-1.5">
+            <span className="w-3 h-3 rounded-full bg-rose-500"></span>
+            <span>3+ Faltas</span>
           </div>
         </div>
       </div>

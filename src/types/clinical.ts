@@ -180,8 +180,8 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
       {
         day: 'Jueves',
         hour: '09:00',
-        professionalId: 'staff_profe_2',
-        professionalName: 'Lic. Juan Ignacio Pérez',
+        professionalId: 'staff_profe_1',
+        professionalName: 'Lic. Valeria Méndez',
       },
     ],
     professionalId: 'staff_profe_1',
@@ -336,8 +336,8 @@ export const INITIAL_STUDENTS: StudentPatient[] = [
       {
         day: 'Martes',
         hour: '11:00',
-        professionalId: 'staff_profe_1',
-        professionalName: 'Lic. Valeria Méndez',
+        professionalId: 'staff_profe_2',
+        professionalName: 'Lic. Juan Ignacio Pérez',
       },
       {
         day: 'Viernes',

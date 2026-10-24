@@ -12,11 +12,11 @@ import {
   User,
 } from 'lucide-react';
 import type { AppRole } from '../../types/clinical';
-import type { StaffMember } from '../../hooks/useAuth';
+import type { LoginResult, StaffMember } from '../../hooks/useAuth';
 
 interface LoginViewProps {
   staffMembers: StaffMember[];
-  onLogin: (staffId: string, password: string) => boolean;
+  onLogin: (staffId: string, password: string) => LoginResult;
 }
 
 const ROLE_CARDS: Array<{
@@ -29,30 +29,30 @@ const ROLE_CARDS: Array<{
 }> = [
   {
     role: 'profesional',
-    title: 'Profesional / Terapeuta',
-    subtitle: 'Equipo Clínico e Interdisciplinario',
+    title: 'Profesional Titular',
+    subtitle: 'Agenda Personal Privada',
     accessSummary:
-      'Acceso a Agenda, Pacientes, Diagnósticos, Historia Clínica e Informes IA.',
+      'Acceso exclusivo a su propia Agenda, sus Pacientes, Historial Clínico, Informes IA y Configuración de Horarios.',
     icon: UserCheck,
     badgeColor: 'border-teal-500 bg-teal-50/70 text-teal-900',
   },
   {
-    role: 'admin',
-    title: 'Dirección / Admin',
-    subtitle: 'Coordinación General del Centro',
-    accessSummary:
-      'Acceso total: Clínica, Informes IA, Horarios, Alta de Personal, Contraseñas y Backups.',
-    icon: Building2,
-    badgeColor: 'border-indigo-500 bg-indigo-50/70 text-indigo-900',
-  },
-  {
     role: 'recepcion',
-    title: 'Recepción / Secretaría',
-    subtitle: 'Gestión Administrativa de Turnos',
+    title: 'Recepcionista Vinculada',
+    subtitle: 'Asistente de un Profesional',
     accessSummary:
-      'Acceso exclusivo a Agenda de Turnos, Datos de Tutor e Inasistencias (Sin Historia Clínica).',
+      'Acceso únicamente a la Agenda y Turnos del Profesional al que está vinculada (Sin acceso a otros profesionales ni a Historia Clínica).',
     icon: ClipboardList,
     badgeColor: 'border-amber-500 bg-amber-50/70 text-amber-900',
+  },
+  {
+    role: 'admin',
+    title: 'Administrador de Usuarios',
+    subtitle: 'Gestión de Suscripciones',
+    accessSummary:
+      'Panel comercial para dar de alta Profesionales, vincular Recepcionistas, activar/pausar suscripciones y gestionar claves.',
+    icon: Building2,
+    badgeColor: 'border-indigo-500 bg-indigo-50/70 text-indigo-900',
   },
 ];
 
@@ -86,15 +86,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ staffMembers, onLogin }) =
     setError(null);
 
     if (!selectedStaffId) {
-      setError('Seleccione su nombre de usuario de la lista.');
+      setError('Seleccione su usuario de la lista.');
       return;
     }
 
-    const ok = onLogin(selectedStaffId, password);
-    if (!ok) {
-      setError(
-        'Contraseña incorrecta para el usuario seleccionado. Verifique su clave asignada.'
-      );
+    const res = onLogin(selectedStaffId, password);
+    if (!res.ok) {
+      setError(res.message);
       return;
     }
     setPassword('');
@@ -114,18 +112,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ staffMembers, onLogin }) =
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                Centro Terapéutico — Portal del Personal
+                Agenda Clínica Personal &amp; Evolución
               </h1>
               <p className="text-xs text-slate-500">
-                Seleccione su área, elija su nombre e ingrese su contraseña personal
+                Cada profesional accede de forma 100% privada a su propio consultorio y
+                pacientes
               </p>
             </div>
           </div>
 
-          {/* 1. Selector de Área / Rol */}
+          {/* 1. Selector de Perfil */}
           <div className="space-y-2">
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
-              1. Seleccione su Área de Trabajo
+              1. Seleccione su Tipo de Cuenta
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {ROLE_CARDS.map((card) => {
@@ -148,7 +147,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ staffMembers, onLogin }) =
                     <div className="flex items-center justify-between mb-2">
                       <Icon className="w-5 h-5" />
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/80 text-slate-700 border border-slate-200">
-                        {count} {count === 1 ? 'usuario' : 'usuarios'}
+                        {count}
                       </span>
                     </div>
                     <div>
@@ -161,7 +160,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ staffMembers, onLogin }) =
             </div>
           </div>
 
-          {/* Detalle de permisos del rol elegido */}
+          {/* Detalle de aislamiento del rol elegido */}
           <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-xs text-slate-700">
             <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
             <div>
@@ -177,32 +176,39 @@ export const LoginView: React.FC<LoginViewProps> = ({ staffMembers, onLogin }) =
             </div>
           )}
 
-          {/* 2. Selector de Miembro del Personal y Contraseña */}
+          {/* 2. Selector de Usuario y Contraseña */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-teal-600" />
-                <span>2. Seleccione su Usuario ({roleMembers.length} disponible/s)</span>
+                <span>2. Seleccione su Usuario</span>
               </label>
-              <select
-                value={activeMember?.id || ''}
-                onChange={(e) => {
-                  setSelectedStaffId(e.target.value);
-                  setError(null);
-                }}
-                className="w-full text-sm p-3 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 font-medium text-slate-800"
-              >
-                {roleMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.fullName} — {member.specialtyOrLicense}
-                  </option>
-                ))}
-              </select>
+              {roleMembers.length === 0 ? (
+                <div className="text-xs text-slate-500 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  No hay usuarios dados de alta en esta categoría todavía.
+                </div>
+              ) : (
+                <select
+                  value={activeMember?.id || ''}
+                  onChange={(e) => {
+                    setSelectedStaffId(e.target.value);
+                    setError(null);
+                  }}
+                  className="w-full text-sm p-3 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 font-medium text-slate-800"
+                >
+                  {roleMembers.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.fullName} — {member.specialtyOrLicense}
+                      {member.subscriptionStatus === 'pausada' ? ' [SUSCRIPCIÓN PAUSADA]' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                3. Contraseña Personal de {activeMember?.fullName || activeCard.title}
+                3. Contraseña de {activeMember?.fullName || activeCard.title}
               </label>
               <div className="relative">
                 <input
@@ -231,11 +237,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ staffMembers, onLogin }) =
 
             <button
               type="submit"
-              className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+              disabled={roleMembers.length === 0}
+              className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Lock className="w-4 h-4" />
               <span>
-                Ingresar como {activeMember?.fullName || activeCard.title}
+                Ingresar a Agenda de {activeMember?.fullName || activeCard.title}
               </span>
             </button>
           </form>
@@ -243,8 +250,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ staffMembers, onLogin }) =
           {/* Cuadro informativo de contraseñas iniciales */}
           <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-500 space-y-1">
             <div className="font-semibold text-slate-700">
-              Accesos predefinidos iniciales (Dirección/Admin puede agregar más personal en
-              Configuración):
+              Cuentas de demostración (cada Profesional ve únicamente sus propios pacientes):
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
               <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1">
@@ -254,12 +260,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ staffMembers, onLogin }) =
                 Lic. Juan I. Pérez: <code className="font-bold text-teal-700">juan2026</code>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1">
-                Dr. Martín Quiroga (Admin):{' '}
-                <code className="font-bold text-indigo-700">admin2026</code>
+                Secretaria de Valeria:{' '}
+                <code className="font-bold text-amber-700">recep2026</code>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1">
-                Sofía Pereyra (Recepción):{' '}
-                <code className="font-bold text-amber-700">recep2026</code>
+                Administrador Suscripciones:{' '}
+                <code className="font-bold text-indigo-700">admin2026</code>
               </div>
             </div>
           </div>
@@ -267,7 +273,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ staffMembers, onLogin }) =
       </div>
 
       <p className="text-center text-xs text-slate-500 mt-4">
-        Control de Acceso Multi-Personal por Rol • Ley 25.326 y Ley 26.529
+        Agenda Personal Privada por Suscripción • Ley 25.326 y Ley 26.529
       </p>
     </div>
   );
