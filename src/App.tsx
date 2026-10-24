@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { ShieldAlert, X, AlertCircle, CalendarDays } from 'lucide-react';
 import {
   CONDITIONS,
@@ -95,52 +95,88 @@ export default function App() {
   const [schedulesByProf, setSchedulesByProf] = useState<
     Record<string, ScheduleConfig>
   >(() => loadSchedulesMap());
-  const [isApplyingRemote, setIsApplyingRemote] = useState(false);
-  const [hasLoadedInitialCloud, setHasLoadedInitialCloud] = useState(false);
+
+  const isRemoteUpdateRef = useRef(false);
+  const hasLoadedInitialCloudRef = useRef(false);
+  const lastSyncedJsonRef = useRef<string>('');
 
   const pullFromCloud = useCallback(async () => {
     const remote = await fetchCloudState();
     if (remote) {
-      setIsApplyingRemote(true);
-      if (Array.isArray(remote.staffMembers) && remote.staffMembers.length > 0) {
-        syncStaffMembersFromCloud(remote.staffMembers);
+      const incomingJson = JSON.stringify({
+        staffMembers: remote.staffMembers,
+        students: remote.students,
+        schedulesByProf: remote.schedulesByProf,
+      });
+      if (incomingJson !== lastSyncedJsonRef.current) {
+        isRemoteUpdateRef.current = true;
+        lastSyncedJsonRef.current = incomingJson;
+        if (Array.isArray(remote.staffMembers) && remote.staffMembers.length > 0) {
+          syncStaffMembersFromCloud(remote.staffMembers);
+        }
+        if (Array.isArray(remote.students) && remote.students.length > 0) {
+          setStudents(remote.students);
+        }
+        if (remote.schedulesByProf) {
+          setSchedulesByProf(remote.schedulesByProf);
+        }
+        window.setTimeout(() => {
+          isRemoteUpdateRef.current = false;
+        }, 50);
       }
-      if (Array.isArray(remote.students) && remote.students.length > 0) {
-        setStudents(remote.students);
-      }
-      if (remote.schedulesByProf) {
-        setSchedulesByProf(remote.schedulesByProf);
-      }
-      setTimeout(() => setIsApplyingRemote(false), 150);
+      hasLoadedInitialCloudRef.current = true;
+    } else if (!hasLoadedInitialCloudRef.current) {
+      // Si la tabla en Supabase está vacía por primera vez, inicializarla con los datos actuales
+      hasLoadedInitialCloudRef.current = true;
+      const initialPayload = {
+        staffMembers,
+        students,
+        schedulesByProf,
+      };
+      lastSyncedJsonRef.current = JSON.stringify(initialPayload);
+      await pushCloudState({
+        ...initialPayload,
+        updatedAt: new Date().toISOString(),
+      });
     }
-    setHasLoadedInitialCloud(true);
-  }, [syncStaffMembersFromCloud]);
+  }, [syncStaffMembersFromCloud, staffMembers, students, schedulesByProf]);
 
   const { isRealtimeConnected } = useRealtimeCenterData(pullFromCloud);
 
-  // Al abrir la app (en PC o en Celular, incluso en la pantalla de Login), descargar estado de la nube
+  // Al abrir la app, al recuperar foco o cada 4 segundos, sincronizar desde Supabase
   useEffect(() => {
     pullFromCloud();
-    const interval = window.setInterval(pullFromCloud, 6000);
-    return () => window.clearInterval(interval);
+    const interval = window.setInterval(pullFromCloud, 4000);
+    const onFocus = () => {
+      pullFromCloud();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
   }, [pullFromCloud]);
 
-  // Cada vez que cambie un usuario, contraseña, paciente, turno u horario, sincronizar a la nube
+  // Cuando el usuario hace un cambio local (usuarios, claves, pacientes, turnos u horarios), subirlo a Supabase
   useEffect(() => {
-    if (!hasLoadedInitialCloud || isApplyingRemote) return;
+    if (!hasLoadedInitialCloudRef.current || isRemoteUpdateRef.current) return;
+    const currentJson = JSON.stringify({
+      staffMembers,
+      students,
+      schedulesByProf,
+    });
+    if (currentJson === lastSyncedJsonRef.current) return;
+    lastSyncedJsonRef.current = currentJson;
+
     pushCloudState({
       staffMembers,
       students,
       schedulesByProf,
       updatedAt: new Date().toISOString(),
     });
-  }, [
-    staffMembers,
-    students,
-    schedulesByProf,
-    hasLoadedInitialCloud,
-    isApplyingRemote,
-  ]);
+  }, [staffMembers, students, schedulesByProf]);
 
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
