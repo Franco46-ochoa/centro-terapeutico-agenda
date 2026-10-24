@@ -1,0 +1,918 @@
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { ShieldAlert, X, AlertCircle } from 'lucide-react';
+import {
+  CONDITIONS,
+  DAYS_OF_WEEK,
+  INITIAL_STUDENTS,
+  type AppRole,
+  type AuditLogItem,
+  type ClinicalEntryType,
+  type DayOfWeek,
+  type ScheduleConfig,
+  type StudentPatient,
+  type TimeSlotItem,
+} from './types/clinical';
+import { NewStudentSchema, ScheduleConfigSchema } from './schemas/clinical.schema';
+import { Header, type ActiveTab } from './components/layout/Header';
+import { ScheduleGrid } from './components/schedule/ScheduleGrid';
+import { PatientDirectory } from './components/patients/PatientDirectory';
+import { ClinicalDossier } from './components/patients/ClinicalDossier';
+import { AiReportGenerator } from './components/reports/AiReportGenerator';
+import { CenterSettings } from './components/settings/CenterSettings';
+import { EncryptedBackupModal } from './components/settings/EncryptedBackupModal';
+import { IdleLockOverlay } from './components/auth/IdleLockOverlay';
+import { LoginView } from './components/auth/LoginView';
+import { useAuth } from './hooks/useAuth';
+import { useIdleTimeout } from './hooks/useIdleTimeout';
+import { useRealtimeCenterData } from './hooks/useRealtimeCenterData';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+export default function App() {
+  const {
+    user,
+    isLocked,
+    rolePasswords,
+    loginWithRolePassword,
+    logout,
+    lockSession,
+    unlockSession,
+    updateRolePassword,
+  } = useAuth();
+  const { isRealtimeConnected } = useRealtimeCenterData();
+
+  const [activeTab, setActiveTab] = useState<ActiveTab>('grid');
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(
+    INITIAL_STUDENTS[0]?.id ?? null
+  );
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+
+  const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({
+    startHour: 9,
+    endHour: 18,
+    slotDuration: 60,
+    includeSaturday: false,
+  });
+
+  const [students, setStudents] = useState<StudentPatient[]>(INITIAL_STUDENTS);
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([
+    {
+      id: 'aud_init',
+      timestamp: new Date().toLocaleTimeString('es-AR'),
+      actorName: 'Sistema AppSec',
+      actorRole: 'admin',
+      action: 'SYSTEM_READY',
+      target: 'Centro Terapéutico',
+      details: 'Control de acceso por contraseña de rol activo (Ley 25.326 / 26.529).',
+    },
+  ]);
+
+  // Modales
+  const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<{
+    day: DayOfWeek;
+    hour: string;
+  } | null>(null);
+
+  // PWA Install Prompt
+  const [deferredPwaPrompt, setDeferredPwaPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPwaPrompt(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (!deferredPwaPrompt) return;
+    await deferredPwaPrompt.prompt();
+    setDeferredPwaPrompt(null);
+  };
+
+  const appendAuditLog = useCallback(
+    (
+      action: string,
+      target: string,
+      details: string,
+      overrideActor?: { name: string; role: AppRole }
+    ) => {
+      setAuditLogs((prev) => [
+        {
+          id: 'aud_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+          timestamp: new Date().toLocaleTimeString('es-AR'),
+          actorName: overrideActor?.name ?? user?.fullName ?? 'Usuario',
+          actorRole: overrideActor?.role ?? user?.role ?? 'recepcion',
+          action,
+          target,
+          details,
+        },
+        ...prev,
+      ]);
+    },
+    [user?.fullName, user?.role]
+  );
+
+  // Bloqueo automático por inactividad solo cuando hay sesión iniciada
+  useIdleTimeout({
+    timeoutMs: 10 * 60 * 1000,
+    backgroundMobileTimeoutMs: 60 * 1000,
+    enabled: Boolean(user),
+    onIdle: () => {
+      lockSession();
+      appendAuditLog(
+        'SESSION_LOCKED',
+        'Pantalla de Consultorio',
+        'Bloqueo preventivo de seguridad'
+      );
+    },
+  });
+
+  // Formulario de Nuevo Paciente
+  const [newStudent, setNewStudent] = useState({
+    name: '',
+    age: '',
+    condition: CONDITIONS[0].label as string,
+    tutorName: '',
+    phone: '',
+    consentSigned: false,
+    day: '' as DayOfWeek | '',
+    hour: '',
+  });
+  const [newStudentError, setNewStudentError] = useState<string | null>(null);
+
+  const timeSlots = useMemo<TimeSlotItem[]>(() => {
+    const slots: TimeSlotItem[] = [];
+    const startMins = scheduleConfig.startHour * 60;
+    const endMins = scheduleConfig.endHour * 60;
+    const duration = scheduleConfig.slotDuration;
+
+    for (let time = startMins; time < endMins; time += duration) {
+      const startH = Math.floor(time / 60)
+        .toString()
+        .padStart(2, '0');
+      const startM = (time % 60).toString().padStart(2, '0');
+      const endTime = time + duration;
+      const endH = Math.floor(endTime / 60)
+        .toString()
+        .padStart(2, '0');
+      const endM = (endTime % 60).toString().padStart(2, '0');
+
+      slots.push({
+        id: `${startH}:${startM}`,
+        label: `${startH}:${startM} - ${endH}:${endM}`,
+      });
+    }
+    return slots;
+  }, [scheduleConfig]);
+
+  const activeDays = useMemo<DayOfWeek[]>(() => {
+    return scheduleConfig.includeSaturday
+      ? DAYS_OF_WEEK
+      : DAYS_OF_WEEK.filter((d) => d !== 'Sábado');
+  }, [scheduleConfig.includeSaturday]);
+
+  const activeStudents = useMemo(
+    () => students.filter((s) => !s.archivedAt),
+    [students]
+  );
+
+  const selectedStudent = useMemo(
+    () => students.find((s) => s.id === selectedStudentId),
+    [students, selectedStudentId]
+  );
+
+  const criticalStudents = useMemo(
+    () => activeStudents.filter((s) => s.absences >= 3),
+    [activeStudents]
+  );
+
+  const getStudentInSlot = useCallback(
+    (day: DayOfWeek, hour: string) => {
+      return activeStudents.find(
+        (s) => s.slot && s.slot.day === day && s.slot.hour === hour
+      );
+    },
+    [activeStudents]
+  );
+
+  const handleLogin = (role: AppRole, passwordInput: string): boolean => {
+    const ok = loginWithRolePassword(role, passwordInput);
+    if (ok) {
+      setActiveTab('grid');
+      setShowArchived(false);
+      appendAuditLog(
+        'LOGIN_SUCCESS',
+        `Perfil ${role}`,
+        `Ingreso autorizado al módulo de ${role}`,
+        { name: `Perfil ${role}`, role }
+      );
+    } else {
+      appendAuditLog(
+        'LOGIN_FAILED',
+        `Perfil ${role}`,
+        'Intento fallido de contraseña en pantalla de inicio',
+        { name: 'Intento no autenticado', role }
+      );
+    }
+    return ok;
+  };
+
+  const handleLogout = () => {
+    if (user) {
+      appendAuditLog('LOGOUT', user.role, 'Cierre de sesión manual');
+    }
+    setActiveTab('grid');
+    logout();
+  };
+
+  // Si ningún usuario ingresó su contraseña todavía, mostrar la Pantalla de Inicio
+  if (!user) {
+    return <LoginView onLogin={handleLogin} />;
+  }
+
+  // Inasistencias con registro auditable
+  const handleAddAbsence = (studentId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const target = students.find((s) => s.id === studentId);
+    if (!target) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (s.id !== studentId) return s;
+        return {
+          ...s,
+          absences: s.absences + 1,
+          attendanceHistory: [
+            {
+              id: 'att_' + Date.now(),
+              date: today,
+              type: 'ausente_injustificado',
+              reason: 'Inasistencia registrada en agenda',
+              recordedBy: user.fullName,
+              createdAt: new Date().toISOString(),
+            },
+            ...s.attendanceHistory,
+          ],
+        };
+      })
+    );
+    appendAuditLog(
+      'ABSENCE_RECORDED',
+      target.name,
+      `Inasistencia contabilizada (Total: ${target.absences + 1})`
+    );
+  };
+
+  const handleResetAbsences = (studentId: string) => {
+    const target = students.find((s) => s.id === studentId);
+    if (!target) return;
+    const today = new Date().toISOString().split('T')[0];
+
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (s.id !== studentId) return s;
+        return {
+          ...s,
+          absences: 0,
+          attendanceHistory: [
+            {
+              id: 'att_' + Date.now(),
+              date: today,
+              type: 'reinicio_ciclo',
+              reason: 'Reinicio de contador de faltas',
+              recordedBy: user.fullName,
+              createdAt: new Date().toISOString(),
+            },
+            ...s.attendanceHistory,
+          ],
+        };
+      })
+    );
+    appendAuditLog('ABSENCE_RESET', target.name, 'Reinicio de contador de faltas a 0');
+  };
+
+  const handleRemoveFromSlot = (studentId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const target = students.find((s) => s.id === studentId);
+    setStudents((prev) =>
+      prev.map((s) => (s.id === studentId ? { ...s, slot: null } : s))
+    );
+    if (target) {
+      appendAuditLog('SLOT_RELEASED', target.name, 'Turno liberado de la grilla');
+    }
+  };
+
+  // Archivado lógico (Soft-delete en cumplimiento del Art. 18 Ley 26.529)
+  const handleArchiveStudent = (studentId: string, reason: string) => {
+    if (user.role !== 'admin') return;
+    const target = students.find((s) => s.id === studentId);
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId
+          ? {
+              ...s,
+              slot: null,
+              archivedAt: new Date().toISOString(),
+              archiveReason: reason,
+            }
+          : s
+      )
+    );
+    if (target) {
+      appendAuditLog('PATIENT_ARCHIVED', target.name, `Motivo: ${reason}`);
+    }
+  };
+
+  const handleCreateStudent = (e: React.FormEvent) => {
+    e.preventDefault();
+    setNewStudentError(null);
+
+    const parsed = NewStudentSchema.safeParse({
+      name: newStudent.name,
+      age: newStudent.age,
+      condition: newStudent.condition,
+      tutorName: newStudent.tutorName,
+      phone: newStudent.phone,
+      consentSigned: newStudent.consentSigned,
+      day: newStudent.day,
+      hour: newStudent.hour,
+    });
+
+    if (!parsed.success) {
+      setNewStudentError(
+        parsed.error.issues[0]?.message || 'Verifique los campos ingresados.'
+      );
+      return;
+    }
+
+    const valid = parsed.data;
+    const today = new Date().toISOString().split('T')[0];
+
+    const created: StudentPatient = {
+      id: 'p_' + Date.now(),
+      name: valid.name,
+      age: valid.age,
+      condition: valid.condition,
+      tutorName: valid.tutorName,
+      phone: valid.phone,
+      consentSigned: valid.consentSigned,
+      consentSignedAt: today,
+      absences: 0,
+      slot:
+        valid.day && valid.hour
+          ? { day: valid.day as DayOfWeek, hour: valid.hour }
+          : null,
+      archivedAt: null,
+      attendanceHistory: [],
+      history: [],
+    };
+
+    setStudents((prev) => [...prev, created]);
+    appendAuditLog(
+      'PATIENT_CREATED',
+      created.name,
+      'Alta con Consentimiento Informado firmado'
+    );
+
+    setNewStudent({
+      name: '',
+      age: '',
+      condition: CONDITIONS[0].label,
+      tutorName: '',
+      phone: '',
+      consentSigned: false,
+      day: '',
+      hour: '',
+    });
+    setIsStudentModalOpen(false);
+  };
+
+  // Agregar asiento clínico inmutable (Append-Only)
+  const handleAddClinicalEntry = (
+    studentId: string,
+    entryData: {
+      date: string;
+      type: ClinicalEntryType;
+      title: string;
+      content: string;
+      amendsEntryId?: string;
+    }
+  ) => {
+    if (user.role === 'recepcion') return;
+    const target = students.find((s) => s.id === studentId);
+
+    const createdEntry = {
+      id: 'h_' + Date.now(),
+      date: entryData.date,
+      type: entryData.type,
+      title: entryData.title,
+      content: entryData.content,
+      authorName: user.fullName,
+      authorRole: user.role,
+      createdAt: new Date().toISOString(),
+      amendsEntryId: entryData.amendsEntryId,
+    };
+
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId ? { ...s, history: [createdEntry, ...s.history] } : s
+      )
+    );
+
+    if (target) {
+      appendAuditLog(
+        'CLINICAL_ENTRY_ADDED',
+        target.name,
+        `[${entryData.type}] ${entryData.title}`
+      );
+    }
+  };
+
+  const handleAssignToSlot = (studentId: string) => {
+    if (!selectedSlot) return;
+    const target = students.find((s) => s.id === studentId);
+
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (s.id === studentId) {
+          return {
+            ...s,
+            slot: { day: selectedSlot.day, hour: selectedSlot.hour },
+          };
+        }
+        if (
+          s.slot &&
+          s.slot.day === selectedSlot.day &&
+          s.slot.hour === selectedSlot.hour
+        ) {
+          return { ...s, slot: null };
+        }
+        return s;
+      })
+    );
+
+    if (target) {
+      appendAuditLog(
+        'SLOT_ASSIGNED',
+        target.name,
+        `${selectedSlot.day} ${selectedSlot.hour} hs`
+      );
+    }
+    setIsAssignModalOpen(false);
+    setSelectedSlot(null);
+  };
+
+  const handleSaveAiReportToHistory = (
+    studentId: string,
+    reportTitle: string,
+    content: string
+  ) => {
+    handleAddClinicalEntry(studentId, {
+      date: new Date().toISOString().split('T')[0],
+      type: 'Evolución',
+      title: reportTitle,
+      content,
+    });
+    window.alert(
+      'El informe validado fue incorporado como asiento firme en la Historia Clínica.'
+    );
+  };
+
+  const handleUpdateScheduleConfig = (nextCfg: ScheduleConfig) => {
+    if (user.role !== 'admin') return;
+    const parsed = ScheduleConfigSchema.safeParse(nextCfg);
+    if (!parsed.success) {
+      window.alert(parsed.error.issues[0]?.message || 'Configuración horaria inválida.');
+      return;
+    }
+    setScheduleConfig(parsed.data);
+    appendAuditLog(
+      'SCHEDULE_CONFIG_UPDATED',
+      'Parámetros Horarios',
+      `${parsed.data.startHour}:00-${parsed.data.endHour}:00 (${parsed.data.slotDuration}m)`
+    );
+  };
+
+  const handlePasswordChange = (targetRole: AppRole, newPass: string): boolean => {
+    const ok = updateRolePassword(targetRole, newPass);
+    if (ok) {
+      appendAuditLog(
+        'PASSWORD_UPDATED',
+        `Rol: ${targetRole}`,
+        `Contraseña de acceso para ${targetRole} actualizada por Dirección/Admin`
+      );
+    }
+    return ok;
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
+      <IdleLockOverlay
+        isLocked={isLocked}
+        userName={user.fullName}
+        onUnlock={unlockSession}
+        onSwitchUser={handleLogout}
+      />
+
+      <Header
+        activeTab={activeTab}
+        setActiveTab={(tab) => {
+          if (user.role === 'recepcion' && (tab === 'reports' || tab === 'settings')) {
+            return;
+          }
+          setActiveTab(tab);
+          if (tab === 'reports' && !selectedStudentId && activeStudents.length > 0) {
+            setSelectedStudentId(activeStudents[0].id);
+          }
+        }}
+        activeStudentsCount={activeStudents.length}
+        currentRole={user.role}
+        currentUserName={user.fullName}
+        onOpenNewStudentModal={() => setIsStudentModalOpen(true)}
+        onLockScreen={lockSession}
+        onSignOut={handleLogout}
+        isCloudConnected={isRealtimeConnected}
+        canInstallPwa={Boolean(deferredPwaPrompt)}
+        onInstallPwa={handleInstallPwa}
+      />
+
+      {/* ALERTA DE INASISTENCIAS CRÍTICAS */}
+      {criticalStudents.length > 0 && (
+        <div className="bg-rose-50 border-b border-rose-200 px-4 py-3 no-print">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div className="flex items-center space-x-3 text-rose-800">
+              <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
+              <div className="text-xs sm:text-sm">
+                <span className="font-bold">Alerta de Inasistencias (3 o más): </span>
+                {criticalStudents.map((s) => `${s.name} (${s.absences} faltas)`).join(', ')}.
+                <span className="ml-1 text-rose-700">
+                  Prioridad para revisión de vacante o liberación del turno.
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('students')}
+              className="text-xs font-semibold text-rose-900 underline hover:text-rose-950 shrink-0"
+            >
+              Gestionar Pacientes
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CONTENIDO PRINCIPAL */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {activeTab === 'grid' && (
+          <ScheduleGrid
+            activeDays={activeDays}
+            timeSlots={timeSlots}
+            scheduleConfig={scheduleConfig}
+            currentRole={user.role}
+            getStudentInSlot={getStudentInSlot}
+            onSelectStudent={(id) => {
+              setSelectedStudentId(id);
+              setActiveTab('students');
+            }}
+            onAddAbsence={handleAddAbsence}
+            onRemoveFromSlot={handleRemoveFromSlot}
+            onOpenAssignModal={(day, hour) => {
+              setSelectedSlot({ day, hour });
+              setIsAssignModalOpen(true);
+            }}
+          />
+        )}
+
+        {activeTab === 'students' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <PatientDirectory
+              students={students}
+              selectedStudentId={selectedStudentId}
+              onSelectStudent={setSelectedStudentId}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              currentRole={user.role}
+              showArchived={showArchived}
+              onToggleShowArchived={setShowArchived}
+            />
+
+            <ClinicalDossier
+              student={selectedStudent}
+              currentRole={user.role}
+              currentUserName={user.fullName}
+              onAddAbsence={handleAddAbsence}
+              onResetAbsences={handleResetAbsences}
+              onArchiveStudent={handleArchiveStudent}
+              onAddClinicalEntry={handleAddClinicalEntry}
+              onGoToReports={() => setActiveTab('reports')}
+            />
+          </div>
+        )}
+
+        {activeTab === 'reports' && user.role !== 'recepcion' && (
+          <AiReportGenerator
+            students={students}
+            selectedStudentId={selectedStudentId}
+            onSelectStudent={setSelectedStudentId}
+            currentUserName={user.fullName}
+            onSaveReportToHistory={handleSaveAiReportToHistory}
+          />
+        )}
+
+        {activeTab === 'settings' && user.role !== 'recepcion' && (
+          <CenterSettings
+            scheduleConfig={scheduleConfig}
+            onChangeScheduleConfig={handleUpdateScheduleConfig}
+            timeSlots={timeSlots}
+            currentRole={user.role}
+            auditLogs={auditLogs}
+            onOpenBackupModal={() => setIsBackupModalOpen(true)}
+            rolePasswords={rolePasswords}
+            onUpdateRolePassword={handlePasswordChange}
+          />
+        )}
+      </main>
+
+      {/* MODAL: ASIGNAR PACIENTE A CELDA HORARIA */}
+      {isAssignModalOpen && selectedSlot && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900">Asignar Turno Semanal</h3>
+                <p className="text-xs text-slate-500">
+                  {selectedSlot.day} a las {selectedSlot.hour} hs
+                </p>
+              </div>
+              <button
+                onClick={() => setIsAssignModalOpen(false)}
+                className="p-1 hover:bg-slate-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Selecciona un paciente activo para asignarlo a esta celda horaria:
+            </p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {activeStudents.map((student) => (
+                <div
+                  key={student.id}
+                  onClick={() => handleAssignToSlot(student.id)}
+                  className="p-3 bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-lg cursor-pointer transition-all flex items-center justify-between group"
+                >
+                  <div>
+                    <div className="font-bold text-xs text-slate-900">
+                      {student.name}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      {user.role === 'recepcion'
+                        ? `Tutor: ${student.tutorName}`
+                        : student.condition}
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-teal-600 group-hover:underline">
+                    Asignar
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setIsAssignModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REGISTRAR NUEVO PACIENTE CON CONSENTIMIENTO LEY 25.326 */}
+      {isStudentModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-slate-900">Registrar Nuevo Paciente</h3>
+              <button
+                onClick={() => setIsStudentModalOpen(false)}
+                className="p-1 hover:bg-slate-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            {newStudentError && (
+              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{newStudentError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateStudent} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nombre Completo del Paciente
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Tomás M. Ramírez"
+                  value={newStudent.name}
+                  onChange={(e) =>
+                    setNewStudent({ ...newStudent, name: e.target.value })
+                  }
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Edad (años)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    max={99}
+                    placeholder="Ej: 8"
+                    value={newStudent.age}
+                    onChange={(e) =>
+                      setNewStudent({ ...newStudent, age: e.target.value })
+                    }
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Condición / Diagnóstico
+                  </label>
+                  <select
+                    value={newStudent.condition}
+                    onChange={(e) =>
+                      setNewStudent({ ...newStudent, condition: e.target.value })
+                    }
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    {CONDITIONS.map((c) => (
+                      <option key={c.id} value={c.label}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Nombre del Padre / Madre / Tutor Legal
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ej: Laura Ramírez (Madre)"
+                    value={newStudent.tutorName}
+                    onChange={(e) =>
+                      setNewStudent({ ...newStudent, tutorName: e.target.value })
+                    }
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Teléfono de Contacto
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ej: 11-2233-4455"
+                    value={newStudent.phone}
+                    onChange={(e) =>
+                      setNewStudent({ ...newStudent, phone: e.target.value })
+                    }
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t pt-3">
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                  Asignar Turno Inicial (Opcional)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <select
+                    value={newStudent.day}
+                    onChange={(e) =>
+                      setNewStudent({
+                        ...newStudent,
+                        day: e.target.value as DayOfWeek | '',
+                      })
+                    }
+                    className="text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"
+                  >
+                    <option value="">-- Día --</option>
+                    {activeDays.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={newStudent.hour}
+                    onChange={(e) =>
+                      setNewStudent({ ...newStudent, hour: e.target.value })
+                    }
+                    className="text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"
+                  >
+                    <option value="">-- Horario --</option>
+                    {timeSlots.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.id} hs
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-lg bg-teal-50/70 border border-teal-200 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newStudent.consentSigned}
+                  onChange={(e) =>
+                    setNewStudent({ ...newStudent, consentSigned: e.target.checked })
+                  }
+                  className="mt-0.5 w-4 h-4 rounded text-teal-600 focus:ring-teal-500"
+                />
+                <span>
+                  Confirmo que el tutor legal suscribió el{' '}
+                  <strong>Consentimiento Informado (Ley 25.326 / Ley 26.529)</strong> para
+                  el tratamiento confidencial de datos clínicos del menor.
+                </span>
+              </label>
+
+              <div className="pt-3 flex justify-end space-x-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsStudentModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                >
+                  Guardar Paciente
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: BACKUP CIFRADO AES-GCM 256 */}
+      <EncryptedBackupModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+        students={students}
+        scheduleConfig={scheduleConfig}
+        currentUserName={user.fullName}
+        onRestoreBackup={(restoredStudents, restoredConfig) => {
+          setStudents(restoredStudents);
+          setScheduleConfig(restoredConfig);
+        }}
+        onAuditEvent={appendAuditLog}
+      />
+
+      <footer className="bg-white border-t border-slate-200 py-4 mt-auto no-print">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
+          <span>
+            Centro Terapéutico y Agente Clínico IA • © {new Date().getFullYear()}
+          </span>
+          <span>
+            Cumplimiento Técnico Ley 25.326 (Datos Sensibles) y Ley 26.529 (Historia Clínica)
+          </span>
+        </div>
+      </footer>
+    </div>
+  );
+}

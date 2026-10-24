@@ -1,0 +1,29 @@
+name: AppSec & Build Verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies safely
+        run: npm ci --ignore-scripts
+
+      - name: Security Audit (Dependencies)
+        run: npm audit --audit-level=high
+
+      - name: TypeScript & Production Build Check
+        run: npm run build
