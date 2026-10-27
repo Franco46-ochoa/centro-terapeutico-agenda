@@ -16,10 +16,12 @@ import {
   TrendingUp,
   AlertTriangle,
   FileText,
+  Cake,
 } from 'lucide-react';
 import {
-  formatAge,
+  formatDateAR,
   getConditionColor,
+  getStudentAgeLabel,
   getStudentSlots,
   type AppRole,
   type ClinicalEntryType,
@@ -36,6 +38,7 @@ interface ClinicalDossierProps {
   onResetAbsences: (studentId: string) => void;
   onRemoveSlot: (studentId: string, day: DayOfWeek, hour: string) => void;
   onArchiveStudent: (studentId: string, reason: string) => void;
+  onUpdateBirthDate: (studentId: string, birthDate: string) => void;
   onAddClinicalEntry: (
     studentId: string,
     entry: {
@@ -59,6 +62,7 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
   onResetAbsences,
   onRemoveSlot,
   onArchiveStudent,
+  onUpdateBirthDate,
   onAddClinicalEntry,
   onGoToReports,
 }) => {
@@ -166,8 +170,35 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
             </div>
 
             <p className="text-sm text-slate-500">
-              {formatAge(student.age, student.ageUnit)} • Tutor Responsable: {student.tutorName} ({student.phone})
+              <strong className="text-slate-700">{getStudentAgeLabel(student)}</strong> •
+              Tutor Responsable: {student.tutorName} ({student.phone})
             </p>
+
+            {/* FECHA DE NACIMIENTO: la edad se recalcula sola a partir de este dato */}
+            <div
+              className={`flex flex-wrap items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border w-fit ${
+                student.birthDate
+                  ? 'bg-slate-50 border-slate-200 text-slate-600'
+                  : 'bg-amber-50 border-amber-300 text-amber-900'
+              }`}
+            >
+              <Cake className="w-3.5 h-3.5 shrink-0" />
+              <span className="font-semibold">
+                {student.birthDate
+                  ? `Nacimiento: ${formatDateAR(student.birthDate)}`
+                  : 'Cargue la fecha de nacimiento para que la edad se actualice sola:'}
+              </span>
+              <input
+                type="date"
+                aria-label="Fecha de nacimiento"
+                max={new Date().toISOString().split('T')[0]}
+                value={student.birthDate || ''}
+                onChange={(e) => {
+                  if (e.target.value) onUpdateBirthDate(student.id, e.target.value);
+                }}
+                className="text-xs bg-white border border-slate-300 rounded px-1.5 py-0.5 outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
+              />
+            </div>
 
             {/* LISTA DE TURNOS SEMANALES DEL PACIENTE */}
             <div className="pt-1 space-y-1.5">

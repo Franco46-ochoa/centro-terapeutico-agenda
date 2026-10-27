@@ -1,4 +1,4 @@
-import { formatAge, type StudentPatient } from '../types/clinical';
+import { getStudentAgeLabel, type StudentPatient } from '../types/clinical';
 
 export const PATIENT_PLACEHOLDER = '{{PACIENTE}}';
 
@@ -59,7 +59,7 @@ export function buildStructuredLocalReport(
   const regressions = student.history.filter((h) => h.type === 'Regresión');
 
   return `### ${reportType.toUpperCase()}
-**Paciente / Alumno:** ${student.name} | **Edad:** ${formatAge(student.age, student.ageUnit)}
+**Paciente / Alumno:** ${student.name} | **Edad:** ${getStudentAgeLabel(student)}
 **Diagnóstico de Referencia:** ${student.condition}
 **Período Evaluado:** ${period}
 **Profesional Interviniente:** ${authorName}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Search, ChevronRight, Lock, Archive } from 'lucide-react';
 import {
-  formatAge,
+  getStudentAgeLabel,
   getConditionColor,
   type AppRole,
   type StudentPatient,
@@ -106,7 +106,7 @@ export const PatientDirectory: React.FC<PatientDirectoryProps> = ({
                 )}
               </div>
               <div className="text-xs text-slate-500 truncate">
-                {formatAge(student.age, student.ageUnit)} • Tutor: {student.tutorName}
+                {getStudentAgeLabel(student)} • Tutor: {student.tutorName}
               </div>
               <div className="text-[11px]">
                 {canViewClinical ? (

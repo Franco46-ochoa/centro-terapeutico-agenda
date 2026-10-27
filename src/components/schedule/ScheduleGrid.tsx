@@ -13,7 +13,7 @@ import {
   Sunset,
 } from 'lucide-react';
 import {
-  formatAge,
+  getStudentAgeLabel,
   getConditionColor,
   getStudentSlots,
   type AppRole,
@@ -203,7 +203,7 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1">
-                    <span className="truncate">{formatAge(student.age, student.ageUnit)}</span>
+                    <span className="truncate">{getStudentAgeLabel(student)}</span>
                     {totalWeeklySlots > 1 && (
                       <span
                         className="inline-flex items-center gap-0.5 text-[10px] font-bold text-teal-800 bg-teal-100/80 px-1.5 py-0.5 rounded"

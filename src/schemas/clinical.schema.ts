@@ -36,12 +36,20 @@ export const NewStudentSchema = z.object({
         .min(2, 'El nombre debe tener al menos 2 caracteres.')
         .max(120, 'El nombre no puede superar los 120 caracteres.')
     ),
-  age: z.coerce
-    .number()
-    .int('La edad debe ser un número entero.')
-    .min(0, 'La edad no puede ser negativa.')
-    .max(99, 'La edad máxima permitida es 99 años.'),
-  ageUnit: z.enum(['meses', 'años']).default('años'),
+  birthDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Ingrese la fecha de nacimiento del paciente.')
+    .refine((val) => {
+      const [y, m, d] = val.split('-').map(Number);
+      const birth = new Date(y, m - 1, d);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      return birth.getTime() <= today.getTime();
+    }, 'La fecha de nacimiento no puede ser posterior a hoy.')
+    .refine((val) => {
+      const year = Number(val.slice(0, 4));
+      return year >= new Date().getFullYear() - 99;
+    }, 'Verifique el año de nacimiento ingresado.'),
   condition: z.string().min(2, 'Seleccione una condición o diagnóstico válido.'),
   tutorName: z
     .string()
@@ -73,14 +81,6 @@ export const NewStudentSchema = z.object({
     .regex(/^([0-2][0-9]:[0-5][0-9])?$/, 'Formato de hora inválido.')
     .optional(),
   professionalId: z.string().optional(),
-}).superRefine((val, ctx) => {
-  if (val.ageUnit === 'meses' && (val.age < 1 || val.age > 36)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['age'],
-      message: 'Para bebés, ingrese una edad entre 1 y 36 meses.',
-    });
-  }
 });
 
 export const ClinicalEntrySchema = z.object({
@@ -140,6 +140,7 @@ export const BackupPayloadSchema = z.object({
       name: z.string().min(1).max(120),
       age: z.number().int().min(0).max(99),
       ageUnit: z.enum(['meses', 'años']).optional(),
+      birthDate: z.string().optional(),
       condition: z.string(),
       tutorName: z.string(),
       phone: z.string(),

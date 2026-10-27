@@ -18,6 +18,61 @@ export function formatAge(age: number, unit: AgeUnit = 'años'): string {
   return `${age} ${age === 1 ? 'año' : 'años'}`;
 }
 
+/** Hasta esta cantidad de meses la edad se muestra en meses; desde ahí, en años. */
+const MONTHS_DISPLAY_LIMIT = 24;
+
+function parseYMD(ymd: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+/**
+ * Calcula la edad actual a partir de la fecha de nacimiento (YYYY-MM-DD).
+ * Se recalcula cada vez que se muestra, por lo que se actualiza sola con el paso del tiempo.
+ */
+export function computeAgeFromBirthDate(
+  birthDate: string,
+  today: Date = new Date()
+): { age: number; unit: AgeUnit; days: number } | null {
+  const birth = parseYMD(birthDate);
+  if (!birth) return null;
+
+  let months =
+    (today.getFullYear() - birth.getFullYear()) * 12 +
+    (today.getMonth() - birth.getMonth());
+  if (today.getDate() < birth.getDate()) months -= 1;
+  months = Math.max(0, months);
+
+  const days = Math.max(
+    0,
+    Math.floor((today.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24))
+  );
+
+  if (months < MONTHS_DISPLAY_LIMIT) return { age: months, unit: 'meses', days };
+  return { age: Math.floor(months / 12), unit: 'años', days };
+}
+
+/** Edad legible del paciente: usa la fecha de nacimiento si existe (se actualiza sola). */
+export function getStudentAgeLabel(student: StudentPatient): string {
+  if (student.birthDate) {
+    const computed = computeAgeFromBirthDate(student.birthDate);
+    if (computed) {
+      if (computed.unit === 'meses' && computed.age === 0) {
+        return `${computed.days} ${computed.days === 1 ? 'día' : 'días'}`;
+      }
+      return formatAge(computed.age, computed.unit);
+    }
+  }
+  return formatAge(student.age, student.ageUnit);
+}
+
+/** Formatea una fecha YYYY-MM-DD como DD/MM/AAAA. */
+export function formatDateAR(ymd: string): string {
+  const [y, m, d] = ymd.split('-');
+  return y && m && d ? `${d}/${m}/${y}` : ymd;
+}
+
 export interface TimeSlotAssignment {
   day: DayOfWeek;
   hour: string;
@@ -52,6 +107,8 @@ export interface StudentPatient {
   name: string;
   age: number;
   ageUnit?: AgeUnit;
+  /** Fecha de nacimiento (YYYY-MM-DD). Si existe, la edad se calcula automáticamente. */
+  birthDate?: string;
   condition: string;
   tutorName: string;
   phone: string;
