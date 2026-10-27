@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import {
   formatDateAR,
-  getConditionColor,
   getStudentAgeLabel,
   getStudentSlots,
   type AppRole,
@@ -93,13 +92,13 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
 
   if (!student) {
     return (
-      <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm min-h-[500px] lg:min-h-[750px] flex flex-col items-center justify-center text-center text-slate-400">
-        <User className="w-12 h-12 mb-3 text-slate-300" />
-        <p className="font-medium text-slate-600">Selecciona un paciente de la lista</p>
-        <p className="text-xs text-slate-400 mt-1">
+      <div className="lg:col-span-2 paper-sheet p-6 min-h-[500px] lg:min-h-[750px] flex flex-col items-center justify-center text-center">
+        <User className="w-10 h-10 mb-3 text-slate-400" strokeWidth={1.4} />
+        <p className="text-lg font-serif text-slate-800">Elegí un paciente de la lista</p>
+        <p className="text-sm text-slate-500 mt-1 max-w-sm">
           {canViewClinical
-            ? 'Podrás consultar su diagnóstico, sus actividades individuales, su historial clínico y generar informes de IA.'
-            : 'Podrás gestionar sus turnos semanales asignados, datos de contacto del tutor e inasistencias.'}
+            ? 'Vas a ver su ficha, sus turnos y su historia clínica.'
+            : 'Vas a ver sus turnos, los datos del tutor y las faltas.'}
         </p>
       </div>
     );
@@ -123,7 +122,7 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
     });
 
     if (!parsed.success) {
-      setFormError(parsed.error.issues[0]?.message || 'Datos inválidos.');
+      setFormError(parsed.error.issues[0]?.message || 'Revisá los datos ingresados.');
       return;
     }
 
@@ -139,511 +138,424 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
 
   const handleRequestArchive = () => {
     const reason = window.prompt(
-      'Ley 26.529 (Art. 18): Las historias clínicas no se destruyen, se archivan con conservación legal mínima de 10 años.\n\nIndique el motivo de archivo del legajo (ej. Alta terapéutica, Pase de institución):'
+      'La historia clínica no se borra: se archiva y se conserva al menos 10 años (Ley 26.529).\n\n¿Por qué se archiva el legajo? (por ejemplo: alta terapéutica, pase a otra institución)'
     );
     if (reason && reason.trim().length >= 3) {
       onArchiveStudent(student.id, reason.trim());
     }
   };
 
+  const fieldClass =
+    'w-full text-sm px-2.5 py-2 bg-[#fffdf7] border border-slate-300 rounded-[3px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20';
+
+  const ENTRY_STYLE: Record<ClinicalEntryType, { border: string; label: string; text: string }> = {
+    Actividad: { border: 'border-l-indigo-500', label: 'Actividad', text: 'text-indigo-700' },
+    Evolución: { border: 'border-l-emerald-500', label: 'Evolución', text: 'text-emerald-700' },
+    Regresión: { border: 'border-l-rose-500', label: 'Regresión', text: 'text-rose-700' },
+    Enmienda: { border: 'border-l-amber-500', label: 'Enmienda', text: 'text-amber-800' },
+  };
+
+  const typeTab = (type: ClinicalEntryType, label: string) => (
+    <button
+      type="button"
+      onClick={() => setNewEntry((prev) => ({ ...prev, type }))}
+      aria-pressed={newEntry.type === type}
+      className={`px-3 py-1 rounded-[3px] text-sm transition cursor-pointer ${
+        newEntry.type === type
+          ? 'bg-slate-900 text-[#f3ead8] font-semibold'
+          : 'text-slate-700 hover:bg-slate-200/70'
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  const filterTab = (filter: HistoryFilterTab, label: string, Icon?: typeof FileText) => (
+    <button
+      type="button"
+      onClick={() => setHistoryFilter(filter)}
+      aria-pressed={historyFilter === filter}
+      className={`flex items-center gap-1.5 px-3 py-1 rounded-[3px] text-sm transition cursor-pointer ${
+        historyFilter === filter
+          ? 'bg-slate-900 text-[#f3ead8] font-semibold'
+          : 'text-slate-700 hover:bg-slate-200/70'
+      }`}
+    >
+      {Icon && <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />}
+      {label}
+    </button>
+  );
+
   return (
-    <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm min-h-[750px] flex flex-col">
-      <div className="flex-1 flex flex-col space-y-6">
-        {/* ENCABEZADO DEL PACIENTE */}
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 pb-4 border-b border-slate-200">
-          <div className="space-y-2">
-            <div className="flex items-center flex-wrap gap-2">
-              <h2 className="text-2xl font-bold text-slate-900">{student.name}</h2>
-              {canViewClinical ? (
-                <span
-                  className={`px-2.5 py-1 rounded text-xs font-medium border ${getConditionColor(
-                    student.condition
-                  )}`}
-                >
-                  {student.condition}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-300">
-                  <Lock className="w-3 h-3" /> Diagnóstico Protegido (Ley 25.326)
-                </span>
-              )}
-            </div>
-
-            <p className="text-sm text-slate-500">
-              <strong className="text-slate-700">{getStudentAgeLabel(student)}</strong> •
-              Tutor Responsable: {student.tutorName} ({student.phone})
-            </p>
-
-            {/* FECHA DE NACIMIENTO: la edad se recalcula sola a partir de este dato */}
-            <div
-              className={`flex flex-wrap items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border w-fit ${
-                student.birthDate
-                  ? 'bg-slate-50 border-slate-200 text-slate-600'
-                  : 'bg-amber-50 border-amber-300 text-amber-900'
-              }`}
-            >
-              <Cake className="w-3.5 h-3.5 shrink-0" />
-              <span className="font-semibold">
-                {student.birthDate
-                  ? `Nacimiento: ${formatDateAR(student.birthDate)}`
-                  : 'Cargue la fecha de nacimiento para que la edad se actualice sola:'}
-              </span>
-              <input
-                type="date"
-                aria-label="Fecha de nacimiento"
-                max={new Date().toISOString().split('T')[0]}
-                value={student.birthDate || ''}
-                onChange={(e) => {
-                  if (e.target.value) onUpdateBirthDate(student.id, e.target.value);
-                }}
-                className="text-xs bg-white border border-slate-300 rounded px-1.5 py-0.5 outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
-              />
-            </div>
-
-            {/* LISTA DE TURNOS SEMANALES DEL PACIENTE */}
-            <div className="pt-1 space-y-1.5">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Clock className="w-3.5 h-3.5 text-teal-600" />
-                <span>
-                  Turnos Semanales ({assignedSlots.length}{' '}
-                  {assignedSlots.length === 1 ? 'sesión' : 'sesiones'} por semana):
-                </span>
+    <div className="lg:col-span-2 space-y-5">
+      {/* FICHA DEL PACIENTE */}
+      <div className="paper-shadow">
+        <div className="paper-sheet torn-bottom paper-curl px-6 pt-5 pb-9">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
+            <div className="space-y-2.5 min-w-0">
+              <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5">
+                <h2 className="text-3xl leading-tight text-slate-900">{student.name}</h2>
+                {canViewClinical ? (
+                  <span className="tape-tag text-sm">{student.condition}</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-sm text-slate-500">
+                    <Lock className="w-3.5 h-3.5" /> Diagnóstico reservado
+                  </span>
+                )}
               </div>
 
-              {assignedSlots.length === 0 ? (
-                <span className="inline-block text-xs text-slate-400 italic">
-                  Sin turnos asignados en la grilla semanal.
-                </span>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {assignedSlots.map((sl) => (
-                    <span
-                      key={`${sl.day}-${sl.hour}-${sl.professionalId || ''}`}
-                      className="inline-flex items-center gap-1.5 bg-teal-50 border border-teal-200 text-teal-900 text-xs px-2.5 py-1 rounded-lg font-medium"
-                    >
-                      <strong>
-                        {sl.day} {sl.hour} hs
-                      </strong>
-                      <button
-                        type="button"
-                        onClick={() => onRemoveSlot(student.id, sl.day, sl.hour)}
-                        title={`Quitar turno del ${sl.day} ${sl.hour} hs`}
-                        className="p-0.5 hover:bg-teal-200/70 rounded text-teal-700 hover:text-rose-700 transition cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+              <p className="text-[15px] text-slate-700">
+                <span className="font-semibold text-slate-900">{getStudentAgeLabel(student)}</span>
+                <span className="text-slate-400 mx-2">|</span>
+                Tutor: {student.tutorName}, {student.phone}
+              </p>
 
-            <div className="flex items-center space-x-1 text-xs text-emerald-700 font-medium pt-1">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>
-                Consentimiento Informado:{' '}
-                {student.consentSigned
-                  ? `Firmado (${student.consentSignedAt || 'Vigente'})`
-                  : 'Pendiente de firma'}
-              </span>
-            </div>
-
-            {student.archivedAt && (
-              <div className="mt-2 inline-flex items-center gap-1.5 text-xs bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded">
-                <Archive className="w-3.5 h-3.5" />
-                <span>
-                  Legajo archivado el {student.archivedAt.split('T')[0]} — Motivo:{' '}
-                  {student.archiveReason}
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col items-start md:items-end space-y-2 shrink-0">
-            <div className="flex items-center space-x-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
-              <span className="text-xs font-semibold text-slate-600">Inasistencias:</span>
-              <span
-                className={`text-sm font-black px-2 py-0.5 rounded ${
-                  student.absences >= 3
-                    ? 'bg-rose-600 text-white'
-                    : 'bg-slate-200 text-slate-800'
+              {/* Fecha de nacimiento: la edad se recalcula sola */}
+              <label
+                className={`inline-flex flex-wrap items-center gap-2 text-sm px-2.5 py-1.5 rounded-[3px] ${
+                  student.birthDate ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-900'
                 }`}
               >
-                {student.absences}
-              </span>
+                <Cake className="w-4 h-4 shrink-0" strokeWidth={1.7} />
+                <span>
+                  {student.birthDate
+                    ? `Nació el ${formatDateAR(student.birthDate)}`
+                    : 'Cargá la fecha de nacimiento para que la edad se actualice sola'}
+                </span>
+                <input
+                  type="date"
+                  aria-label="Fecha de nacimiento"
+                  max={new Date().toISOString().split('T')[0]}
+                  value={student.birthDate || ''}
+                  onChange={(e) => {
+                    if (e.target.value) onUpdateBirthDate(student.id, e.target.value);
+                  }}
+                  className="text-sm bg-[#fffdf7] border border-slate-300 rounded-[3px] px-1.5 py-0.5 outline-none focus:border-teal-600 cursor-pointer"
+                />
+              </label>
 
-              <button
-                onClick={() => onAddAbsence(student.id)}
-                title="Registrar Inasistencia Auditable"
-                className="p-1 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded text-xs font-bold cursor-pointer"
-              >
-                +1 Falta
-              </button>
+              {/* Turnos semanales */}
+              <div className="pt-1">
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 mb-1.5">
+                  <Clock className="w-4 h-4 text-slate-500" strokeWidth={1.7} />
+                  {assignedSlots.length === 0
+                    ? 'Sin turnos asignados'
+                    : `${assignedSlots.length} ${assignedSlots.length === 1 ? 'turno' : 'turnos'} por semana`}
+                </div>
+                {assignedSlots.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {assignedSlots.map((sl) => (
+                      <span
+                        key={`${sl.day}-${sl.hour}-${sl.professionalId || ''}`}
+                        className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-[3px] bg-sea text-teal-900 text-sm"
+                      >
+                        {sl.day} {sl.hour}
+                        <button
+                          type="button"
+                          onClick={() => onRemoveSlot(student.id, sl.day, sl.hour)}
+                          title={`Quitar el turno del ${sl.day} a las ${sl.hour}`}
+                          aria-label={`Quitar el turno del ${sl.day} a las ${sl.hour}`}
+                          className="p-0.5 rounded hover:bg-teal-200 hover:text-rose-700 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-              <button
-                onClick={() => onResetAbsences(student.id)}
-                title="Reiniciar contador de faltas (queda registrado en auditoría)"
-                className="p-1 bg-white hover:bg-emerald-50 text-emerald-600 border border-slate-200 rounded text-xs cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
+              <p className="flex items-center gap-1.5 text-sm text-slate-600">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" strokeWidth={1.7} />
+                {student.consentSigned
+                  ? `Consentimiento firmado${student.consentSignedAt ? ` el ${formatDateAR(student.consentSignedAt)}` : ''}`
+                  : 'Falta firmar el consentimiento'}
+              </p>
 
-              <button
-                onClick={() => setShowAttendanceLog((v) => !v)}
-                title="Ver bitácora de asistencias y faltas"
-                className="p-1 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded text-xs cursor-pointer"
-              >
-                <History className="w-3.5 h-3.5" />
-              </button>
+              {student.archivedAt && (
+                <p className="flex items-center gap-1.5 text-sm text-amber-900 bg-amber-100 px-2.5 py-1.5 rounded-[3px] w-fit">
+                  <Archive className="w-4 h-4" />
+                  Archivado el {formatDateAR(student.archivedAt.split('T')[0])}: {student.archiveReason}
+                </p>
+              )}
             </div>
 
-            <div className="flex items-center space-x-2">
-              {canViewClinical && (
-                <button
-                  onClick={onGoToReports}
-                  className="flex items-center space-x-1 text-xs bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg font-medium shadow-sm cursor-pointer"
+            {/* Faltas y acciones */}
+            <div className="flex flex-col items-start md:items-end gap-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`stamp-pill text-sm px-3 py-0.5 ${
+                    student.absences >= 3
+                      ? 'text-rose-600'
+                      : student.absences > 0
+                        ? 'text-amber-700'
+                        : 'text-emerald-600'
+                  }`}
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Generar Informe IA</span>
+                  {student.absences} {student.absences === 1 ? 'falta' : 'faltas'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onAddAbsence(student.id)}
+                  title="Anotar una falta"
+                  className="px-2 py-1 text-sm text-rose-700 border border-rose-300 rounded-[3px] hover:bg-rose-50 cursor-pointer"
+                >
+                  Anotar falta
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => onResetAbsences(student.id)}
+                  title="Volver el contador de faltas a cero"
+                  aria-label="Volver el contador de faltas a cero"
+                  className="p-1.5 text-slate-600 border border-slate-300 rounded-[3px] hover:bg-slate-100 cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAttendanceLog((v) => !v)}
+                  title="Ver el registro de faltas"
+                  aria-label="Ver el registro de faltas"
+                  aria-expanded={showAttendanceLog}
+                  className="p-1.5 text-slate-600 border border-slate-300 rounded-[3px] hover:bg-slate-100 cursor-pointer"
+                >
+                  <History className="w-4 h-4" />
+                </button>
+              </div>
 
-              {canViewClinical && !student.archivedAt && (
-                <button
-                  onClick={handleRequestArchive}
-                  className="flex items-center gap-1 p-1.5 text-xs text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg border border-transparent hover:border-amber-200 cursor-pointer"
-                  title="Archivar Legajo (Conservación Legal Ley 26.529)"
-                >
-                  <Archive className="w-4 h-4" />
-                  <span>Archivar</span>
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {canViewClinical && (
+                  <button
+                    type="button"
+                    onClick={onGoToReports}
+                    className="flex items-center gap-1.5 text-sm bg-teal-700 hover:bg-teal-800 text-[#f6eedd] px-3 py-1.5 rounded-[3px] cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4" strokeWidth={1.7} />
+                    Armar informe
+                  </button>
+                )}
+                {canViewClinical && !student.archivedAt && (
+                  <button
+                    type="button"
+                    onClick={handleRequestArchive}
+                    title="Archivar el legajo"
+                    className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900 px-2 py-1.5 cursor-pointer"
+                  >
+                    <Archive className="w-4 h-4" strokeWidth={1.7} />
+                    Archivar
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* BITÁCORA AUDITABLE DE INASISTENCIAS */}
-        {showAttendanceLog && (
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-              Registro Auditable de Inasistencias y Reinicios ({student.attendanceHistory.length})
-            </h4>
-            {student.attendanceHistory.length === 0 ? (
-              <p className="text-xs text-slate-400">Sin eventos de inasistencia registrados.</p>
-            ) : (
-              <div className="max-h-32 overflow-y-auto space-y-1.5 text-xs">
-                {student.attendanceHistory.map((att) => (
-                  <div
-                    key={att.id}
-                    className="flex items-center justify-between bg-white px-3 py-1.5 rounded border border-slate-200"
-                  >
-                    <span>
-                      <strong>{att.date}</strong> — {att.type.replace('_', ' ')}
-                      {att.reason ? `: ${att.reason}` : ''}
-                    </span>
-                    <span className="text-[11px] text-slate-400">{att.recordedBy}</span>
-                  </div>
-                ))}
+          {showAttendanceLog && (
+            <div className="mt-5 pt-4 border-t border-dashed border-slate-300">
+              <h3 className="text-lg text-slate-900 mb-2">Registro de faltas</h3>
+              {student.attendanceHistory.length === 0 ? (
+                <p className="text-sm text-slate-500">No hay faltas registradas.</p>
+              ) : (
+                <ul className="max-h-40 overflow-y-auto divide-y divide-slate-200 text-sm">
+                  {student.attendanceHistory.map((att) => (
+                    <li key={att.id} className="flex items-center justify-between gap-3 py-1.5">
+                      <span>
+                        <span className="font-semibold">{formatDateAR(att.date)}</span>{' '}
+                        {att.type.replace(/_/g, ' ')}
+                        {att.reason ? `: ${att.reason}` : ''}
+                      </span>
+                      <span className="text-xs text-slate-500 shrink-0">{att.recordedBy}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {!canViewClinical ? (
+        <div className="paper-sheet p-8 text-center">
+          <Lock className="w-7 h-7 mx-auto mb-2 text-slate-500" strokeWidth={1.5} />
+          <h3 className="text-xl text-slate-900">La historia clínica es solo para el profesional</h3>
+          <p className="text-sm text-slate-600 max-w-md mx-auto mt-1">
+            Desde recepción podés gestionar turnos, datos del tutor y faltas.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* CARGA DE UN NUEVO REGISTRO, sobre papel rayado */}
+          <div className="ruled-paper slip-card px-5 pt-4 pb-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <h3 className="text-xl text-slate-900 flex items-center gap-1.5">
+                <Plus className="w-5 h-5 text-slate-500" strokeWidth={1.6} />
+                Nuevo registro
+              </h3>
+              <div className="flex items-center gap-1 p-1 rounded-md bg-slate-100 border border-slate-200">
+                {typeTab('Actividad', 'Actividad')}
+                {typeTab('Evolución', 'Evolución')}
+                {typeTab('Regresión', 'Regresión')}
+              </div>
+            </div>
+
+            {formError && (
+              <div
+                role="alert"
+                className="mb-3 px-3 py-2 border-l-4 border-rose-500 bg-rose-50 text-rose-800 text-sm flex items-center gap-2"
+              >
+                <FileWarning className="w-4 h-4 shrink-0" />
+                {formError}
               </div>
             )}
-          </div>
-        )}
 
-        {/* SECCIÓN CLÍNICA: BLOQUEADA PARA RECEPCIÓN (RBAC) */}
-        {!canViewClinical ? (
-          <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-200 p-8 text-center">
-            <div className="p-3 rounded-full bg-amber-100 text-amber-700 mb-3">
-              <Lock className="w-7 h-7" />
-            </div>
-            <h3 className="text-sm font-bold text-slate-800">
-              Historia Clínica y Actividades Restringidas por Rol (Ley 25.326 / Ley 26.529)
-            </h3>
-            <p className="text-xs text-slate-500 max-w-md mt-1">
-              El perfil de <strong>Recepción</strong> solo tiene acceso a datos administrativos,
-              asignación de múltiples turnos semanales y control de asistencia. El diagnóstico,
-              las actividades individuales y las evoluciones clínicas son de acceso exclusivo del
-              profesional titular.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* FORMULARIO PARA CARGAR ACTIVIDAD INDIVIDUAL, EVOLUCIÓN O REGRESIÓN */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
-                  <Plus className="w-4 h-4 text-teal-600" />
-                  <span>
-                    Cargar Actividad Individual / Evolución en Historia Clínica
-                  </span>
-                </h4>
-
-                {/* Botones rápidos para elegir tipo de carga */}
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setNewEntry((prev) => ({ ...prev, type: 'Actividad' }))}
-                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+            <form onSubmit={handleSubmitEntry} className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label htmlFor="entry-date" className="block text-sm font-semibold text-slate-700 mb-1">
+                    Fecha de la sesión
+                  </label>
+                  <input
+                    id="entry-date"
+                    type="date"
+                    value={newEntry.date}
+                    onChange={(e) => setNewEntry({ ...newEntry, date: e.target.value })}
+                    className={fieldClass}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="entry-type" className="block text-sm font-semibold text-slate-700 mb-1">
+                    Tipo de registro
+                  </label>
+                  <select
+                    id="entry-type"
+                    value={newEntry.type}
+                    onChange={(e) =>
+                      setNewEntry({ ...newEntry, type: e.target.value as ClinicalEntryType })
+                    }
+                    className={fieldClass}
+                  >
+                    <option value="Actividad">Actividad</option>
+                    <option value="Evolución">Evolución</option>
+                    <option value="Regresión">Regresión</option>
+                    <option value="Enmienda">Enmienda (corrige un registro anterior)</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="entry-title" className="block text-sm font-semibold text-slate-700 mb-1">
+                    Título
+                  </label>
+                  <input
+                    id="entry-title"
+                    type="text"
+                    placeholder={
                       newEntry.type === 'Actividad'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    + Actividad Individual
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewEntry((prev) => ({ ...prev, type: 'Evolución' }))}
-                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
-                      newEntry.type === 'Evolución'
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    + Evolución
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewEntry((prev) => ({ ...prev, type: 'Regresión' }))}
-                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
-                      newEntry.type === 'Regresión'
-                        ? 'bg-rose-600 text-white'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    + Regresión
-                  </button>
+                        ? 'Por ejemplo, encastre de formas'
+                        : 'Por ejemplo, sostiene la mirada'
+                    }
+                    value={newEntry.title}
+                    onChange={(e) => setNewEntry({ ...newEntry, title: e.target.value })}
+                    className={fieldClass}
+                    required
+                  />
                 </div>
               </div>
 
-              {formError && (
-                <div className="mb-3 p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-                  <FileWarning className="w-4 h-4 shrink-0" />
-                  <span>{formError}</span>
+              {newEntry.type === 'Enmienda' && student.history.length > 0 && (
+                <div>
+                  <label htmlFor="entry-amends" className="block text-sm font-semibold text-amber-900 mb-1">
+                    Registro que se corrige
+                  </label>
+                  <select
+                    id="entry-amends"
+                    value={newEntry.amendsEntryId}
+                    onChange={(e) => setNewEntry({ ...newEntry, amendsEntryId: e.target.value })}
+                    className={fieldClass}
+                  >
+                    <option value="">Elegí el registro</option>
+                    {student.history.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {formatDateAR(h.date)}: {h.title}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 
-              <form onSubmit={handleSubmitEntry} className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Fecha de la Sesión
-                    </label>
-                    <input
-                      type="date"
-                      value={newEntry.date}
-                      onChange={(e) => setNewEntry({ ...newEntry, date: e.target.value })}
-                      className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Categoría del Registro
-                    </label>
-                    <select
-                      value={newEntry.type}
-                      onChange={(e) =>
-                        setNewEntry({
-                          ...newEntry,
-                          type: e.target.value as ClinicalEntryType,
-                        })
-                      }
-                      className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-semibold"
-                    >
-                      <option value="Actividad">Actividad Individual / Ejercicio</option>
-                      <option value="Evolución">Evolución / Avance Clínico</option>
-                      <option value="Regresión">Regresión / Dificultad Observada</option>
-                      <option value="Enmienda">Enmienda / Nota Aclaratoria (Ley 26.529)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Título de la {newEntry.type}
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={
-                        newEntry.type === 'Actividad'
-                          ? 'Ej: Motricidad fina con bloques'
-                          : 'Ej: Avance en atención conjunta'
-                      }
-                      value={newEntry.title}
-                      onChange={(e) => setNewEntry({ ...newEntry, title: e.target.value })}
-                      className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {newEntry.type === 'Enmienda' && student.history.length > 0 && (
-                  <div>
-                    <label className="block text-xs font-medium text-amber-800 mb-1">
-                      Asiento clínico que se rectifica / aclara:
-                    </label>
-                    <select
-                      value={newEntry.amendsEntryId}
-                      onChange={(e) =>
-                        setNewEntry({ ...newEntry, amendsEntryId: e.target.value })
-                      }
-                      className="w-full text-xs p-2 bg-amber-50 border border-amber-300 rounded-lg outline-none"
-                    >
-                      <option value="">-- Seleccione el registro a enmendar --</option>
-                      {student.history.map((h) => (
-                        <option key={h.id} value={h.id}>
-                          [{h.date}] {h.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">
-                    Descripción Detallada de la {newEntry.type}
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Detalle los ejercicios realizados, materiales utilizados, respuesta del paciente y observaciones clínicas..."
-                    value={newEntry.content}
-                    onChange={(e) => setNewEntry({ ...newEntry, content: e.target.value })}
-                    className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 resize-none"
-                    required
-                  ></textarea>
-                </div>
-
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-[11px] text-slate-400">
-                    Profesional firmante: <strong>{currentUserName}</strong>
-                  </span>
-                  <button
-                    type="submit"
-                    className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center space-x-1.5 cursor-pointer"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>Guardar {newEntry.type}</span>
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* PESTAÑAS DE FILTRO: HISTORIAL COMPLETO vs ACTIVIDADES INDIVIDUALES vs EVOLUCIONES */}
-            <div className="flex-1 flex flex-col space-y-3">
-              <div className="space-y-2.5 border-b border-slate-200 pb-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-teal-600" />
-                  <span>Historia Clínica y Actividades de {student.name}</span>
-                </h4>
-
-                <div className="inline-flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setHistoryFilter('ALL')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      historyFilter === 'ALL'
-                        ? 'bg-white text-slate-900 shadow-sm font-bold'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Todo ({student.history.length})
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setHistoryFilter('Actividad')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                      historyFilter === 'Actividad'
-                        ? 'bg-white text-indigo-700 shadow-sm font-bold'
-                        : 'text-slate-600 hover:text-indigo-700'
-                    }`}
-                  >
-                    <ClipboardList className="w-3.5 h-3.5" />
-                    <span>Actividades ({activitiesCount})</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setHistoryFilter('Evolución')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                      historyFilter === 'Evolución'
-                        ? 'bg-white text-emerald-700 shadow-sm font-bold'
-                        : 'text-slate-600 hover:text-emerald-700'
-                    }`}
-                  >
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    <span>Evoluciones ({evolutionsCount})</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setHistoryFilter('Regresión')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                      historyFilter === 'Regresión'
-                        ? 'bg-white text-rose-700 shadow-sm font-bold'
-                        : 'text-slate-600 hover:text-rose-700'
-                    }`}
-                  >
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>Regresiones ({regressionsCount})</span>
-                  </button>
-                </div>
+              <div>
+                <label htmlFor="entry-content" className="block text-sm font-semibold text-slate-700 mb-1">
+                  Qué se trabajó y cómo respondió
+                </label>
+                <textarea
+                  id="entry-content"
+                  rows={3}
+                  placeholder="Materiales, consignas, nivel de apoyo, respuesta del paciente…"
+                  value={newEntry.content}
+                  onChange={(e) => setNewEntry({ ...newEntry, content: e.target.value })}
+                  className={`${fieldClass} resize-y leading-7`}
+                  required
+                />
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[380px]">
-                {filteredHistory.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    No hay registros en la categoría seleccionada. Usá el formulario de arriba
-                    para cargar una nueva {historyFilter === 'ALL' ? 'entrada' : historyFilter}.
-                  </div>
-                ) : (
-                  filteredHistory.map((item) => (
-                    <div
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs text-slate-500">Firma: {currentUserName}</span>
+                <button
+                  type="submit"
+                  className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-[#f6eedd] text-sm font-semibold px-4 py-2 rounded-[3px] cursor-pointer"
+                >
+                  <Save className="w-4 h-4" strokeWidth={1.7} />
+                  Guardar {newEntry.type.toLowerCase()}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* HISTORIA CLÍNICA: notas apiladas */}
+          <div className="paper-sheet px-5 pt-4 pb-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <h3 className="text-xl text-slate-900">Historia clínica</h3>
+              <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-md bg-slate-100 border border-slate-200">
+                {filterTab('ALL', `Todo (${student.history.length})`)}
+                {filterTab('Actividad', `Actividades (${activitiesCount})`, ClipboardList)}
+                {filterTab('Evolución', `Evoluciones (${evolutionsCount})`, TrendingUp)}
+                {filterTab('Regresión', `Regresiones (${regressionsCount})`, AlertTriangle)}
+              </div>
+            </div>
+
+            <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+              {filteredHistory.length === 0 ? (
+                <p className="text-sm text-slate-500 py-6 text-center">
+                  {historyFilter === 'ALL'
+                    ? 'Todavía no hay registros. Cargá el primero arriba.'
+                    : 'No hay registros de este tipo.'}
+                </p>
+              ) : (
+                filteredHistory.map((item) => {
+                  const style = ENTRY_STYLE[item.type];
+                  return (
+                    <article
                       key={item.id}
-                      className={`p-3.5 rounded-lg border transition-all ${
-                        item.type === 'Evolución'
-                          ? 'bg-emerald-50/50 border-emerald-200'
-                          : item.type === 'Regresión'
-                            ? 'bg-rose-50/50 border-rose-200'
-                            : item.type === 'Actividad'
-                              ? 'bg-indigo-50/40 border-indigo-200'
-                              : 'bg-amber-50/60 border-amber-300'
-                      }`}
+                      className={`slip-card border-l-4 ${style.border} px-4 py-3`}
                     >
-                      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                        <div className="flex items-center space-x-2">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                              item.type === 'Evolución'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : item.type === 'Regresión'
-                                  ? 'bg-rose-100 text-rose-800'
-                                  : item.type === 'Actividad'
-                                    ? 'bg-indigo-100 text-indigo-800'
-                                    : 'bg-amber-200 text-amber-900'
-                            }`}
-                          >
-                            {item.type === 'Actividad' ? 'Actividad Individual' : item.type}
-                          </span>
-                          <span className="font-bold text-sm text-slate-900">
-                            {item.title}
-                          </span>
-                        </div>
-                        <span className="text-xs font-medium text-slate-400">
-                          {item.date} • {item.authorName}
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 mb-1">
+                        <h4 className="text-[15px] font-semibold text-slate-900">
+                          <span className={`${style.text} font-semibold mr-2`}>{style.label}</span>
+                          {item.title}
+                        </h4>
+                        <span className="text-xs text-slate-500">
+                          {formatDateAR(item.date)}, {item.authorName}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
+                      <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
                         {item.content}
                       </p>
-                    </div>
-                  ))
-                )}
-              </div>
+                    </article>
+                  );
+                })
+              )}
             </div>
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

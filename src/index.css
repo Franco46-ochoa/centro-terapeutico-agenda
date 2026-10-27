@@ -1,5 +1,309 @@
 @import "tailwindcss";
 
+/*
+ * Identidad visual "consultorio de papel":
+ * papel de cuaderno, fichas rasgadas, papel madera y tinta de lapicera.
+ * Se redefinen las escalas de Tailwind para que toda la app herede la paleta
+ * sin depender de grises fríos ni de los turquesas por defecto.
+ */
+@theme {
+  --font-sans: "Nunito Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+
+  /* Papel → tinta (reemplaza a los grises fríos) */
+  --color-slate-50: #f6f1e6;
+  --color-slate-100: #efe7d6;
+  --color-slate-200: #e2d6bf;
+  --color-slate-300: #cdbd9f;
+  --color-slate-400: #a8977a;
+  --color-slate-500: #857560;
+  --color-slate-600: #66594a;
+  --color-slate-700: #4c4238;
+  --color-slate-800: #362f28;
+  --color-slate-900: #2a2420;
+  --color-slate-950: #1e1a17;
+
+  --color-gray-50: #f6f1e6;
+  --color-gray-100: #efe7d6;
+  --color-gray-200: #e2d6bf;
+  --color-gray-300: #cdbd9f;
+  --color-gray-400: #a8977a;
+  --color-gray-500: #857560;
+  --color-gray-600: #66594a;
+  --color-gray-700: #4c4238;
+  --color-gray-800: #362f28;
+  --color-gray-900: #2a2420;
+
+  --color-white: #fbf7ee;
+
+  /* Verde pino: color principal de acciones */
+  --color-teal-50: #eaf2ef;
+  --color-teal-100: #d3e4de;
+  --color-teal-200: #b3cfc7;
+  --color-teal-300: #8db4a9;
+  --color-teal-400: #69968a;
+  --color-teal-500: #4f7d72;
+  --color-teal-600: #3e665c;
+  --color-teal-700: #33544c;
+  --color-teal-800: #2a443e;
+  --color-teal-900: #233833;
+  --color-teal-950: #142320;
+
+  /* Rojo de sello de goma (faltas, alertas) */
+  --color-rose-50: #fbefec;
+  --color-rose-100: #f5dbd5;
+  --color-rose-200: #ecb9ae;
+  --color-rose-300: #df9182;
+  --color-rose-400: #d06a58;
+  --color-rose-500: #b8463a;
+  --color-rose-600: #a03a2f;
+  --color-rose-700: #843027;
+  --color-rose-800: #6b2821;
+  --color-rose-900: #58221d;
+  --color-rose-950: #33100d;
+
+  /* Mostaza de resaltador */
+  --color-amber-50: #fbf5e4;
+  --color-amber-100: #f5e8c2;
+  --color-amber-200: #eed596;
+  --color-amber-300: #e5be65;
+  --color-amber-400: #dcaa45;
+  --color-amber-500: #c9922c;
+  --color-amber-600: #a97522;
+  --color-amber-700: #875a1d;
+  --color-amber-800: #6f491d;
+  --color-amber-900: #5c3d1b;
+  --color-amber-950: #34200b;
+
+  /* Salvia (evolución, sin faltas) */
+  --color-emerald-50: #f0f4ec;
+  --color-emerald-100: #dee8d6;
+  --color-emerald-200: #c3d5b6;
+  --color-emerald-300: #a2bd8f;
+  --color-emerald-400: #85a571;
+  --color-emerald-500: #6b8b58;
+  --color-emerald-600: #557045;
+  --color-emerald-700: #445939;
+  --color-emerald-800: #384831;
+  --color-emerald-900: #303d2b;
+  --color-emerald-950: #172014;
+
+  /* Tinta azul de lapicera (actividades, enlaces) */
+  --color-indigo-50: #eef0f5;
+  --color-indigo-100: #dbe0ea;
+  --color-indigo-200: #bcc5d8;
+  --color-indigo-300: #95a3c0;
+  --color-indigo-400: #7182a6;
+  --color-indigo-500: #56688d;
+  --color-indigo-600: #445374;
+  --color-indigo-700: #38445f;
+  --color-indigo-800: #303a50;
+  --color-indigo-900: #2b3344;
+  --color-indigo-950: #1b202b;
+
+  --color-blue-100: #dbe0ea;
+  --color-blue-300: #95a3c0;
+  --color-blue-800: #303a50;
+
+  --color-purple-100: #ece0e9;
+  --color-purple-300: #c8a8c1;
+  --color-purple-800: #5d3a57;
+
+  /* Tokens propios */
+  --color-paper: #f6f1e6;
+  --color-card: #fbf7ee;
+  --color-kraft: #cfb994;
+  --color-kraft-dark: #b39b74;
+  --color-ink: #2a2420;
+  --color-wood: #8b6a42;
+  --color-sea: #d6e6e1;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background-color: var(--color-paper);
+    /* Grano de papel muy sutil */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .28 0 0 0 0 .2 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: 0.005em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-teal-600);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Logotipo en versalitas */
+  .brand-wordmark {
+    font-family: var(--font-serif);
+    font-variant: small-caps;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+
+  /* Hoja de papel con borde inferior rasgado y sombra apoyada */
+  .paper-sheet {
+    position: relative;
+    background-color: var(--color-card);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .4 0 0 0 0 .32 0 0 0 0 .22 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E");
+    border-radius: 3px;
+    box-shadow:
+      0 1px 0 rgba(84, 66, 44, 0.08),
+      0 6px 14px -8px rgba(60, 44, 28, 0.35);
+  }
+
+  .torn-bottom {
+    clip-path: polygon(
+      0 0, 100% 0, 100% 96%, 97% 98.5%, 94% 96.8%, 90% 99%, 86% 97%, 82% 99.4%,
+      78% 97.4%, 74% 98.8%, 70% 96.9%, 66% 99.2%, 62% 97.6%, 58% 99%, 54% 97.1%,
+      50% 99.3%, 46% 97.3%, 42% 98.9%, 38% 97%, 34% 99.2%, 30% 97.5%, 26% 98.7%,
+      22% 96.9%, 18% 99.1%, 14% 97.4%, 10% 98.8%, 6% 97%, 3% 99%, 0 97%
+    );
+  }
+
+  /* Contenedor que proyecta la sombra de una hoja recortada */
+  .paper-shadow {
+    filter: drop-shadow(0 5px 8px rgba(60, 44, 28, 0.22));
+  }
+
+  /* Esquina doblada abajo a la derecha */
+  .paper-curl::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 22px;
+    height: 22px;
+    background: linear-gradient(315deg, var(--color-paper) 48%, #e6dac4 50%, #d8c8ac 100%);
+    box-shadow: -2px -2px 3px rgba(60, 44, 28, 0.12);
+    border-top-left-radius: 4px;
+    pointer-events: none;
+  }
+
+  /* Ficha de turno: papel con bordes levemente irregulares */
+  .slip-card {
+    position: relative;
+    background-color: var(--color-card);
+    border: 1px solid #e6dcc8;
+    border-radius: 2px 5px 3px 6px / 6px 3px 5px 2px;
+    box-shadow:
+      0 1px 1px rgba(84, 66, 44, 0.1),
+      0 4px 10px -6px rgba(60, 44, 28, 0.4);
+  }
+
+  /* Casillero vacío de papel madera */
+  .kraft-slot {
+    position: relative;
+    color: #5b4a35;
+    background-color: var(--color-kraft);
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 .3 0 0 0 0 .22 0 0 0 0 .12 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23k)'/%3E%3C/svg%3E"),
+      linear-gradient(160deg, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.06));
+    border-radius: 3px 6px 2px 5px / 5px 2px 6px 3px;
+    box-shadow: inset 0 0 0 1px rgba(90, 70, 40, 0.18), 0 2px 5px -3px rgba(60, 44, 28, 0.5);
+    transition: background-color 0.15s ease;
+  }
+
+  .kraft-slot:hover {
+    background-color: #d8c4a0;
+  }
+
+  /* Botones del calendario: madera con anillos de carpeta */
+  .wood-btn {
+    position: relative;
+    color: #fbf3e2;
+    background-color: var(--color-wood);
+    background-image:
+      repeating-linear-gradient(
+        92deg,
+        rgba(255, 255, 255, 0.05) 0 2px,
+        rgba(0, 0, 0, 0.05) 2px 5px,
+        rgba(255, 255, 255, 0.03) 5px 9px
+      ),
+      linear-gradient(180deg, #a07c4d, #7b5c37);
+    border: 1px solid #6a4f30;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 3px 6px -3px rgba(40, 28, 14, 0.6);
+  }
+
+  .binder-rings::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 18%;
+    right: 18%;
+    height: 10px;
+    background:
+      radial-gradient(circle at 4px 5px, #9b9389 3px, transparent 3.5px) 0 0 / 22px 10px repeat-x;
+    pointer-events: none;
+  }
+
+  /* Etiqueta de diagnóstico tipo cinta de papel */
+  .tape-tag {
+    display: inline-block;
+    padding: 1px 7px;
+    color: #4c4238;
+    background: rgba(214, 198, 166, 0.65);
+    border-left: 1px dashed rgba(120, 98, 66, 0.35);
+    border-right: 1px dashed rgba(120, 98, 66, 0.35);
+    transform: rotate(-0.6deg);
+  }
+
+  /* Contador de faltas tipo sello */
+  .stamp-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    border: 1.5px solid currentColor;
+    background: rgba(251, 247, 238, 0.7);
+    transform: rotate(-2deg);
+  }
+
+  /* Subrayado de pestaña activa hecho "a mano" */
+  .ink-underline {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='6' viewBox='0 0 120 6'%3E%3Cpath d='M2 4c18-2 38-3 58-2s40 1 58-1' fill='none' stroke='%23e8d9b8' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center bottom;
+    background-size: 100% 6px;
+  }
+
+  /* Papel rayado de cuaderno para formularios de escritura */
+  .ruled-paper {
+    background-color: var(--color-card);
+    background-image: repeating-linear-gradient(
+      180deg,
+      transparent 0 27px,
+      rgba(86, 104, 141, 0.12) 27px 28px
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
 @media print {
   header,
   footer,

@@ -130,8 +130,8 @@ export const EncryptedBackupModal: React.FC<EncryptedBackupModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl space-y-4">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+      <div className="paper-sheet max-w-lg w-full p-6 shadow-2xl space-y-4">
         <div className="flex items-center justify-between border-b pb-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-indigo-600" />
@@ -139,7 +139,7 @@ export const EncryptedBackupModal: React.FC<EncryptedBackupModalProps> = ({
               Resguardo Cifrado de Historia Clínica (AES-GCM 256 + PBKDF2)
             </h3>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg">
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-[3px]">
             <X className="w-4 h-4 text-slate-400" />
           </button>
         </div>
@@ -151,14 +151,14 @@ export const EncryptedBackupModal: React.FC<EncryptedBackupModalProps> = ({
         </p>
 
         {errorMessage && (
-          <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+          <div className="p-3 rounded-[3px] bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
 
         {statusMessage && (
-          <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+          <div className="p-3 rounded-[3px] bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
             {statusMessage}
           </div>
         )}
@@ -176,7 +176,7 @@ export const EncryptedBackupModal: React.FC<EncryptedBackupModalProps> = ({
               placeholder="Contraseña segura para proteger el archivo..."
               value={passphrase}
               onChange={(e) => setPassphrase(e.target.value)}
-              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-[3px] outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
@@ -184,13 +184,13 @@ export const EncryptedBackupModal: React.FC<EncryptedBackupModalProps> = ({
             <button
               type="submit"
               disabled={isProcessing}
-              className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition disabled:opacity-50"
+              className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-[3px] transition disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
               <span>Exportar Cifrado (.enc.json)</span>
             </button>
 
-            <label className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition cursor-pointer">
+            <label className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold py-2.5 px-4 rounded-[3px] transition cursor-pointer">
               <Upload className="w-4 h-4" />
               <span>Importar Archivo (.enc.json)</span>
               <input

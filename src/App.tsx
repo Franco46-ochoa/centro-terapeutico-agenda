@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { ShieldAlert, X, AlertCircle, CalendarDays } from 'lucide-react';
+import { X, AlertCircle, CalendarDays } from 'lucide-react';
 import {
   CONDITIONS,
   DAYS_OF_WEEK,
@@ -18,7 +18,8 @@ import {
   type TimeSlotItem,
 } from './types/clinical';
 import { NewStudentSchema, ScheduleConfigSchema } from './schemas/clinical.schema';
-import { Header, type ActiveTab } from './components/layout/Header';
+import { Header, type ActiveTab, type SyncStatus } from './components/layout/Header';
+import type { AppNotification } from './components/layout/NotificationBell';
 import { ScheduleGrid, type SlotMatchItem } from './components/schedule/ScheduleGrid';
 import { PatientDirectory } from './components/patients/PatientDirectory';
 import { ClinicalDossier } from './components/patients/ClinicalDossier';
@@ -103,9 +104,43 @@ export default function App() {
   const hasLoadedInitialCloudRef = useRef(false);
   const lastSyncedJsonRef = useRef<string>('');
 
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(
+    typeof navigator !== 'undefined' && !navigator.onLine ? 'sin-conexion' : 'sincronizando'
+  );
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
+
+  const markSyncResult = useCallback((ok: boolean) => {
+    if (ok) {
+      setSyncStatus('sincronizado');
+      setLastSyncAt(new Date());
+    } else {
+      setSyncStatus('sin-conexion');
+    }
+  }, []);
+
+  const pushAndTrack = useCallback(
+    async (payload: Parameters<typeof pushCloudState>[0]) => {
+      setSyncStatus('sincronizando');
+      const ok = await pushCloudState(payload);
+      markSyncResult(ok);
+    },
+    [markSyncResult]
+  );
+
+  useEffect(() => {
+    const goOffline = () => setSyncStatus('sin-conexion');
+    window.addEventListener('offline', goOffline);
+    return () => window.removeEventListener('offline', goOffline);
+  }, []);
+
   const pullFromCloud = useCallback(async () => {
+    if (!navigator.onLine) {
+      setSyncStatus('sin-conexion');
+      return;
+    }
     const remote = await fetchCloudState();
     if (remote) {
+      markSyncResult(true);
       const incomingJson = JSON.stringify({
         staffMembers: remote.staffMembers,
         students: remote.students,
@@ -137,14 +172,23 @@ export default function App() {
         schedulesByProf,
       };
       lastSyncedJsonRef.current = JSON.stringify(initialPayload);
-      await pushCloudState({
+      await pushAndTrack({
         ...initialPayload,
         updatedAt: new Date().toISOString(),
       });
+    } else {
+      markSyncResult(false);
     }
-  }, [syncStaffMembersFromCloud, staffMembers, students, schedulesByProf]);
+  }, [
+    syncStaffMembersFromCloud,
+    staffMembers,
+    students,
+    schedulesByProf,
+    markSyncResult,
+    pushAndTrack,
+  ]);
 
-  const { isRealtimeConnected } = useRealtimeCenterData(pullFromCloud);
+  useRealtimeCenterData(pullFromCloud);
 
   // Al abrir la app, al recuperar foco o cada 4 segundos, sincronizar desde Supabase
   useEffect(() => {
@@ -154,12 +198,19 @@ export default function App() {
       pullFromCloud();
     };
     window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
     document.addEventListener('visibilitychange', onFocus);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onFocus);
     };
+  }, [pullFromCloud]);
+
+  const handleForceSync = useCallback(async () => {
+    setSyncStatus('sincronizando');
+    await pullFromCloud();
   }, [pullFromCloud]);
 
   // Cuando el usuario hace un cambio local (usuarios, claves, pacientes, turnos u horarios), subirlo a Supabase
@@ -173,13 +224,13 @@ export default function App() {
     if (currentJson === lastSyncedJsonRef.current) return;
     lastSyncedJsonRef.current = currentJson;
 
-    pushCloudState({
+    pushAndTrack({
       staffMembers,
       students,
       schedulesByProf,
       updatedAt: new Date().toISOString(),
     });
-  }, [staffMembers, students, schedulesByProf]);
+  }, [staffMembers, students, schedulesByProf, pushAndTrack]);
 
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -415,10 +466,67 @@ export default function App() {
     [workspaceStudents, activeStudents, selectedStudentId]
   );
 
-  const criticalStudents = useMemo(
-    () => activeStudents.filter((s) => s.absences >= 3),
-    [activeStudents]
-  );
+  const todayDayName = useMemo<DayOfWeek | null>(() => {
+    const names: Array<DayOfWeek | null> = [
+      null,
+      'Lunes',
+      'Martes',
+      'Miércoles',
+      'Jueves',
+      'Viernes',
+      'Sábado',
+    ];
+    return names[new Date().getDay()] ?? null;
+  }, []);
+
+  const todayAppointments = useMemo(() => {
+    if (!todayDayName) return [];
+    return activeStudents
+      .flatMap((s) =>
+        getStudentSlots(s)
+          .filter((sl) => sl.day === todayDayName)
+          .map((sl) => ({ student: s, hour: sl.hour }))
+      )
+      .sort((a, b) => a.hour.localeCompare(b.hour));
+  }, [activeStudents, todayDayName]);
+
+  const notifications = useMemo<AppNotification[]>(() => {
+    const list: AppNotification[] = [];
+    if (todayAppointments.length > 0) {
+      const first = todayAppointments[0];
+      list.push({
+        id: 'hoy',
+        kind: 'hoy',
+        title: `${todayAppointments.length} ${
+          todayAppointments.length === 1 ? 'turno' : 'turnos'
+        } hoy`,
+        detail: `El primero a las ${first.hour} hs con ${first.student.name}.`,
+      });
+    }
+    activeStudents
+      .filter((s) => s.absences >= 3)
+      .forEach((s) =>
+        list.push({
+          id: `faltas-${s.id}`,
+          kind: 'faltas',
+          title: `${s.name} tiene ${s.absences} faltas`,
+          detail: 'Conviene revisar si se mantiene el turno.',
+          studentId: s.id,
+        })
+      );
+    activeStudents
+      .filter((s) => !s.birthDate)
+      .forEach((s) =>
+        list.push({
+          id: `nac-${s.id}`,
+          kind: 'nacimiento',
+          title: `Falta la fecha de nacimiento de ${s.name}`,
+          detail: 'Cargala en su ficha para que la edad se actualice sola.',
+          studentId: s.id,
+        })
+      );
+    return list;
+  }, [activeStudents, todayAppointments]);
 
   const getStudentsInSlot = useCallback(
     (day: DayOfWeek, hour: string): SlotMatchItem[] => {
@@ -914,7 +1022,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
+    <div className="min-h-screen text-slate-800 flex flex-col font-sans">
       <IdleLockOverlay
         isLocked={isLocked}
         userName={user.fullName}
@@ -934,39 +1042,27 @@ export default function App() {
           }
         }}
         activeStudentsCount={activeStudents.length}
+        todayAppointmentsCount={todayAppointments.length}
         currentRole={user.role}
         currentUserName={user.fullName}
         onOpenNewStudentModal={() => setIsStudentModalOpen(true)}
         onLockScreen={lockSession}
         onSignOut={handleLogout}
-        isCloudConnected={isRealtimeConnected}
+        syncStatus={syncStatus}
+        lastSyncAt={lastSyncAt}
+        onForceSync={handleForceSync}
+        notifications={notifications}
+        onSelectNotification={(n) => {
+          if (n.studentId) {
+            setSelectedStudentId(n.studentId);
+            setActiveTab('students');
+          } else {
+            setActiveTab('grid');
+          }
+        }}
         canInstallPwa={Boolean(deferredPwaPrompt)}
         onInstallPwa={handleInstallPwa}
       />
-
-      {/* ALERTA DE INASISTENCIAS CRÍTICAS (Solo para Profesional y Recepción, nunca para Admin de Usuarios) */}
-      {user.role !== 'admin' && criticalStudents.length > 0 && (
-        <div className="bg-rose-50 border-b border-rose-200 px-4 py-3 no-print">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <div className="flex items-center space-x-3 text-rose-800">
-              <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
-              <div className="text-xs sm:text-sm">
-                <span className="font-bold">Alerta de Inasistencias (3 o más): </span>
-                {criticalStudents.map((s) => `${s.name} (${s.absences} faltas)`).join(', ')}.
-                <span className="ml-1 text-rose-700">
-                  Prioridad para revisión de vacante o liberación del turno.
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={() => setActiveTab('students')}
-              className="text-xs font-semibold text-rose-900 underline hover:text-rose-950 shrink-0"
-            >
-              Gestionar Pacientes
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -1070,36 +1166,31 @@ export default function App() {
 
       {/* MODAL: ASIGNAR / SUMAR TURNO SEMANAL */}
       {isAssignModalOpen && selectedSlot && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-50 flex items-center justify-center p-4 no-print">
+          <div className="paper-sheet max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
-                <h3 className="font-bold text-slate-900">
-                  Asignar / Sumar Turno Semanal
-                </h3>
-                <p className="text-xs text-slate-500">
-                  {selectedSlot.day} a las {selectedSlot.hour} hs • Agenda de{' '}
-                  <strong>{activeWorkspaceName}</strong>
+                <h3 className="text-2xl text-slate-900">Asignar turno</h3>
+                <p className="text-sm text-slate-600">
+                  {selectedSlot.day} a las {selectedSlot.hour}. Se suma a los otros turnos del
+                  paciente.
                 </p>
               </div>
               <button
                 onClick={() => setIsAssignModalOpen(false)}
-                className="p-1 hover:bg-slate-100 rounded-lg"
+                aria-label="Cerrar"
+                className="p-1 hover:bg-slate-100 rounded-[3px] cursor-pointer"
               >
-                <X className="w-5 h-5 text-slate-400" />
+                <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-600">
-              Selecciona uno de los pacientes de <strong>{activeWorkspaceName}</strong>{' '}
-              para sumarle este horario semanal:
-            </p>
+            <p className="text-sm text-slate-700">Elegí el paciente:</p>
 
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {activeStudents.length === 0 ? (
-                <div className="text-xs text-slate-400 text-center py-6">
-                  Aún no hay pacientes registrados en esta agenda. Usá el botón &quot;Nuevo
-                  Paciente&quot; primero.
+                <div className="text-sm text-slate-500 text-center py-6">
+                  Todavía no hay pacientes. Cargá uno con &quot;Nuevo paciente&quot;.
                 </div>
               ) : (
                 activeStudents.map((student) => {
@@ -1108,11 +1199,11 @@ export default function App() {
                     <div
                       key={student.id}
                       onClick={() => handleAssignToSlot(student.id)}
-                      className="p-3 bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-lg cursor-pointer transition-all flex items-center justify-between group"
+                      className="slip-card p-3 hover:bg-[#fffaf0] cursor-pointer transition flex items-center justify-between group"
                     >
                       <div className="min-w-0 pr-2">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-xs text-slate-900 truncate">
+                          <span className="font-semibold text-sm text-slate-900 truncate">
                             {student.name}
                           </span>
                           {currentSlots.length > 0 && (
@@ -1131,8 +1222,8 @@ export default function App() {
                             : 'Sin turnos asignados aún'}
                         </div>
                       </div>
-                      <span className="text-xs font-semibold text-teal-600 group-hover:underline shrink-0">
-                        + Sumar Turno
+                      <span className="text-sm text-teal-700 group-hover:underline shrink-0">
+                        Asignar
                       </span>
                     </div>
                   );
@@ -1143,7 +1234,7 @@ export default function App() {
             <div className="pt-2 flex justify-end">
               <button
                 onClick={() => setIsAssignModalOpen(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-[3px]"
               >
                 Cancelar
               </button>
@@ -1154,25 +1245,24 @@ export default function App() {
 
       {/* MODAL: REGISTRAR NUEVO PACIENTE */}
       {isStudentModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl space-y-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-50 flex items-center justify-center p-4 no-print">
+          <div className="paper-sheet max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
-                <h3 className="font-bold text-slate-900">Registrar Nuevo Paciente</h3>
-                <p className="text-xs text-slate-500">
-                  Cartera privada de: <strong>{activeWorkspaceName}</strong>
-                </p>
+                <h3 className="text-2xl text-slate-900">Nuevo paciente</h3>
+                <p className="text-sm text-slate-600">Queda en la agenda de {activeWorkspaceName}.</p>
               </div>
               <button
                 onClick={() => setIsStudentModalOpen(false)}
-                className="p-1 hover:bg-slate-100 rounded-lg"
+                aria-label="Cerrar"
+                className="p-1 hover:bg-slate-100 rounded-[3px] cursor-pointer"
               >
-                <X className="w-5 h-5 text-slate-400" />
+                <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
             {newStudentError && (
-              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-[3px] bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{newStudentError}</span>
               </div>
@@ -1181,7 +1271,7 @@ export default function App() {
             <form onSubmit={handleCreateStudent} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Nombre Completo del Paciente
+                  Nombre y apellido
                 </label>
                 <input
                   type="text"
@@ -1191,14 +1281,14 @@ export default function App() {
                   onChange={(e) =>
                     setNewStudent({ ...newStudent, name: e.target.value })
                   }
-                  className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-[3px] outline-none focus:ring-2 focus:ring-teal-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Fecha de Nacimiento
+                    Fecha de nacimiento
                   </label>
                   <input
                     type="date"
@@ -1208,7 +1298,7 @@ export default function App() {
                     onChange={(e) =>
                       setNewStudent({ ...newStudent, birthDate: e.target.value })
                     }
-                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-[3px] outline-none focus:ring-2 focus:ring-teal-500"
                   />
                   {newStudent.birthDate && (
                     <p className="text-[11px] text-teal-700 font-semibold mt-1">
@@ -1223,14 +1313,14 @@ export default function App() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Condición / Diagnóstico
+                    Diagnóstico
                   </label>
                   <select
                     value={newStudent.condition}
                     onChange={(e) =>
                       setNewStudent({ ...newStudent, condition: e.target.value })
                     }
-                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-[3px] outline-none focus:ring-2 focus:ring-teal-500"
                   >
                     {CONDITIONS.map((c) => (
                       <option key={c.id} value={c.label}>
@@ -1244,7 +1334,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Nombre del Padre / Madre / Tutor Legal
+                    Madre, padre o tutor
                   </label>
                   <input
                     type="text"
@@ -1254,13 +1344,13 @@ export default function App() {
                     onChange={(e) =>
                       setNewStudent({ ...newStudent, tutorName: e.target.value })
                     }
-                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-[3px] outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Teléfono de Contacto
+                    Teléfono
                   </label>
                   <input
                     type="text"
@@ -1270,14 +1360,14 @@ export default function App() {
                     onChange={(e) =>
                       setNewStudent({ ...newStudent, phone: e.target.value })
                     }
-                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-[3px] outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
               </div>
 
               <div className="border-t pt-3">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-                  Asignar Primer Turno (Luego podés sumarle más desde la grilla)
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Primer turno (después podés sumar más desde la agenda)
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <select
@@ -1288,9 +1378,9 @@ export default function App() {
                         day: e.target.value as DayOfWeek | '',
                       })
                     }
-                    className="text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"
+                    className="text-xs p-2 bg-slate-50 border border-slate-200 rounded-[3px] outline-none"
                   >
-                    <option value="">-- Día --</option>
+                    <option value="">Día</option>
                     {activeDays.map((d) => (
                       <option key={d} value={d}>
                         {d}
@@ -1303,9 +1393,9 @@ export default function App() {
                     onChange={(e) =>
                       setNewStudent({ ...newStudent, hour: e.target.value })
                     }
-                    className="text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none"
+                    className="text-xs p-2 bg-slate-50 border border-slate-200 rounded-[3px] outline-none"
                   >
-                    <option value="">-- Horario --</option>
+                    <option value="">Horario</option>
                     {timeSlots.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.id} hs
@@ -1315,7 +1405,7 @@ export default function App() {
                 </div>
               </div>
 
-              <label className="flex items-start gap-2.5 p-3 rounded-lg bg-teal-50/70 border border-teal-200 text-xs text-slate-700 cursor-pointer">
+              <label className="flex items-start gap-2.5 p-3 rounded-[3px] bg-teal-50/70 border border-teal-200 text-xs text-slate-700 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={newStudent.consentSigned}
@@ -1335,15 +1425,15 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsStudentModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-[3px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-[3px]"
                 >
-                  Guardar Paciente
+                  Guardar paciente
                 </button>
               </div>
             </form>
@@ -1368,14 +1458,12 @@ export default function App() {
         onAuditEvent={appendAuditLog}
       />
 
-      <footer className="bg-white border-t border-slate-200 py-4 mt-auto no-print">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
-          <span>
-            Agenda Clínica Personal por Suscripción • © {new Date().getFullYear()}
+      <footer className="mt-auto py-5 no-print">
+        <div className="max-w-7xl mx-auto px-4 pt-4 border-t border-dashed border-slate-300 flex flex-col sm:flex-row items-center justify-between gap-1 text-xs text-slate-500">
+          <span className="font-serif text-sm text-slate-600">
+            Centro Terapéutico, {new Date().getFullYear()}
           </span>
-          <span>
-            Cumplimiento Técnico Ley 25.326 (Datos Sensibles) y Ley 26.529 (Historia Clínica)
-          </span>
+          <span>Datos clínicos protegidos según las leyes 25.326 y 26.529.</span>
         </div>
       </footer>
     </div>

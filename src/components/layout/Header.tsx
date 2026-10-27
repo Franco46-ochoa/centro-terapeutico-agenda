@@ -1,218 +1,229 @@
 import React from 'react';
 import {
-  Activity,
   Calendar,
-  User,
-  Sparkles,
+  Users,
+  BrainCircuit,
   Settings,
   UserPlus,
   Lock,
-  ShieldCheck,
-  Cloud,
-  HardDrive,
-  Download,
   LogOut,
-  Users,
+  Download,
+  Cloud,
+  CloudUpload,
+  CloudOff,
+  type LucideIcon,
 } from 'lucide-react';
 import type { AppRole } from '../../types/clinical';
+import { EcgLogo } from '../ui/EcgLogo';
+import { NotificationBell, type AppNotification } from './NotificationBell';
 
 export type ActiveTab = 'grid' | 'students' | 'reports' | 'settings';
+export type SyncStatus = 'sincronizado' | 'sincronizando' | 'sin-conexion';
 
 interface HeaderProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   activeStudentsCount: number;
+  todayAppointmentsCount: number;
   currentRole: AppRole;
   currentUserName: string;
   onOpenNewStudentModal: () => void;
   onLockScreen: () => void;
   onSignOut: () => void;
-  isCloudConnected: boolean;
+  syncStatus: SyncStatus;
+  lastSyncAt: Date | null;
+  onForceSync: () => void;
+  notifications: AppNotification[];
+  onSelectNotification: (n: AppNotification) => void;
   canInstallPwa: boolean;
   onInstallPwa: () => void;
 }
 
-const ROLE_LABELS: Record<AppRole, string> = {
-  profesional: 'Profesional',
-  admin: 'Administrador',
-  recepcion: 'Recepción',
+const SYNC_META: Record<SyncStatus, { icon: LucideIcon; label: string }> = {
+  sincronizado: { icon: Cloud, label: 'Datos guardados en la nube' },
+  sincronizando: { icon: CloudUpload, label: 'Guardando en la nube…' },
+  'sin-conexion': { icon: CloudOff, label: 'Sin conexión: los cambios se guardan en este equipo' },
 };
+
+interface NavItemProps {
+  active: boolean;
+  onClick: () => void;
+  icon: LucideIcon;
+  label: string;
+  count?: number;
+}
+
+const NavItem: React.FC<NavItemProps> = ({ active, onClick, icon: Icon, label, count }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-current={active ? 'page' : undefined}
+    className={`flex items-center gap-1.5 px-2.5 pt-1.5 pb-2 text-sm transition cursor-pointer ${
+      active ? 'text-white ink-underline' : 'text-[#d9ccb3] hover:text-white'
+    }`}
+  >
+    <Icon className="w-[18px] h-[18px]" strokeWidth={1.6} />
+    <span>{label}</span>
+    {typeof count === 'number' && (
+      <span className="min-w-5 h-5 px-1.5 rounded-full bg-white/10 text-[11px] leading-5 text-center text-[#f1e8d6]">
+        {count}
+      </span>
+    )}
+  </button>
+);
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   activeStudentsCount,
+  todayAppointmentsCount,
   currentRole,
   currentUserName,
   onOpenNewStudentModal,
   onLockScreen,
   onSignOut,
-  isCloudConnected,
+  syncStatus,
+  lastSyncAt,
+  onForceSync,
+  notifications,
+  onSelectNotification,
   canInstallPwa,
   onInstallPwa,
 }) => {
   const isAdmin = currentRole === 'admin';
   const isProfesional = currentRole === 'profesional';
+  const sync = SYNC_META[syncStatus];
+  const SyncIcon = sync.icon;
+  const syncTitle = lastSyncAt
+    ? `${sync.label}. Última sincronización: ${lastSyncAt.toLocaleTimeString('es-AR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}. Tocá para sincronizar ahora.`
+    : `${sync.label}. Tocá para sincronizar ahora.`;
 
   return (
-    <header className="bg-slate-900 text-slate-100 border-b border-slate-800 sticky top-0 z-30 shadow-md no-print">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-        {/* Marca y Usuario Activo */}
+    <header className="bg-slate-900 text-[#f1e8d6] sticky top-0 z-30 shadow-[0_2px_0_rgba(0,0,0,0.25)] no-print">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        {/* Marca */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="bg-teal-500 text-slate-900 p-2 rounded-xl shrink-0 shadow-sm">
-            <Activity className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-white truncate">
-                {isAdmin
-                  ? 'Panel de Suscripciones y Usuarios'
-                  : 'Centro Terapéutico'}
-              </h1>
-              <span className="inline-flex items-center gap-1 bg-slate-800 border border-slate-700 text-teal-300 text-[11px] font-semibold px-2 py-0.5 rounded-md">
-                <ShieldCheck className="w-3 h-3 text-teal-400 shrink-0" />
-                {ROLE_LABELS[currentRole]}
-              </span>
-              <span
-                className={`hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
-                  isCloudConnected
-                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700'
-                    : 'bg-slate-800/80 text-amber-300 border-slate-700'
-                }`}
-              >
-                {isCloudConnected ? (
-                  <>
-                    <Cloud className="w-3 h-3" /> Nube
-                  </>
-                ) : (
-                  <>
-                    <HardDrive className="w-3 h-3" /> Guardado Activo
-                  </>
-                )}
-              </span>
+          <EcgLogo className="w-14 h-8 text-[#c9a978] shrink-0" />
+          <div className="min-w-0 leading-tight">
+            <div className="brand-wordmark text-xl sm:text-2xl text-[#f3ead8] truncate">
+              {isAdmin ? 'Administración' : 'Centro Terapéutico'}
             </div>
-            <p className="text-[11px] text-slate-400 truncate mt-0.5">
-              {currentUserName}
-            </p>
+            <div className="text-xs text-[#b9a98d] truncate">{currentUserName}</div>
           </div>
         </div>
 
-        {/* Pestañas de Navegación Limpias (Sin barra de scroll fea) */}
-        <div className="flex flex-wrap items-center gap-1.5 w-full xl:w-auto justify-start xl:justify-end">
-          {/* Contenedor tipo barra segmentada para las vistas principales */}
-          {!isAdmin ? (
-            <div className="flex flex-wrap items-center bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 gap-1">
-              <button
-                onClick={() => setActiveTab('grid')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                  activeTab === 'grid'
-                    ? 'bg-teal-500 text-slate-950 shadow-sm font-bold'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Agenda</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('students')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                  activeTab === 'students'
-                    ? 'bg-teal-500 text-slate-950 shadow-sm font-bold'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                }`}
-              >
-                <User className="w-3.5 h-3.5" />
-                <span>Pacientes</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                    activeTab === 'students'
-                      ? 'bg-slate-900 text-teal-300'
-                      : 'bg-slate-700 text-slate-200'
-                  }`}
-                >
-                  {activeStudentsCount}
-                </span>
-              </button>
-
-              {isProfesional && (
-                <button
-                  onClick={() => setActiveTab('reports')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                    activeTab === 'reports'
-                      ? 'bg-teal-500 text-slate-950 shadow-sm font-bold'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Informes IA</span>
-                </button>
-              )}
-
-              <button
-                onClick={() => setActiveTab('settings')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                  activeTab === 'settings'
-                    ? 'bg-teal-500 text-slate-950 shadow-sm font-bold'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>Configuración</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center bg-slate-800/90 p-1 rounded-xl border border-slate-700/80">
-              <button
-                onClick={() => setActiveTab('settings')}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-teal-500 text-slate-950 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Usuarios y Suscripciones</span>
-              </button>
-            </div>
+        {/* Navegación y acciones */}
+        <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
+          {!isAdmin && (
+            <NotificationBell
+              notifications={notifications}
+              onSelect={onSelectNotification}
+            />
           )}
 
-          {/* Botones de Acción Derecha */}
-          <div className="flex items-center gap-1.5 ml-auto xl:ml-1">
-            {!isAdmin && (
-              <button
-                onClick={onOpenNewStudentModal}
-                className="flex items-center gap-1.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold px-3 py-2 rounded-xl text-xs transition shadow-sm cursor-pointer"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Nuevo Paciente</span>
-              </button>
+          <button
+            type="button"
+            onClick={onForceSync}
+            title={syncTitle}
+            aria-label={syncTitle}
+            className={`p-2 rounded-md hover:bg-white/5 transition cursor-pointer ${
+              syncStatus === 'sin-conexion'
+                ? 'text-rose-300'
+                : syncStatus === 'sincronizando'
+                  ? 'text-amber-200'
+                  : 'text-[#e9dfcb] hover:text-white'
+            }`}
+          >
+            <SyncIcon className="w-5 h-5" strokeWidth={1.6} />
+          </button>
+
+          <nav className="flex flex-wrap items-center" aria-label="Secciones">
+            {isAdmin ? (
+              <NavItem
+                active
+                onClick={() => setActiveTab('settings')}
+                icon={Users}
+                label="Usuarios y suscripciones"
+              />
+            ) : (
+              <>
+                <NavItem
+                  active={activeTab === 'grid'}
+                  onClick={() => setActiveTab('grid')}
+                  icon={Calendar}
+                  label="Agenda"
+                  count={todayAppointmentsCount}
+                />
+                <NavItem
+                  active={activeTab === 'students'}
+                  onClick={() => setActiveTab('students')}
+                  icon={Users}
+                  label="Pacientes"
+                  count={activeStudentsCount}
+                />
+                {isProfesional && (
+                  <NavItem
+                    active={activeTab === 'reports'}
+                    onClick={() => setActiveTab('reports')}
+                    icon={BrainCircuit}
+                    label="Informes IA"
+                  />
+                )}
+                <NavItem
+                  active={activeTab === 'settings'}
+                  onClick={() => setActiveTab('settings')}
+                  icon={Settings}
+                  label="Configuración"
+                />
+              </>
             )}
+          </nav>
 
-            {canInstallPwa && (
-              <button
-                onClick={onInstallPwa}
-                title="Instalar como aplicación en PC o Celular"
-                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3 py-2 rounded-xl text-xs transition cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Instalar</span>
-              </button>
-            )}
-
+          {!isAdmin && (
             <button
-              onClick={onLockScreen}
-              title="Bloquear pantalla (Ctrl + L)"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer"
+              type="button"
+              onClick={onOpenNewStudentModal}
+              className="ml-1 flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-semibold text-slate-900 bg-[#f1e6cf] hover:bg-[#f8efdc] border border-[#d8c49c] rounded-[3px_6px_4px_5px] shadow-[0_2px_0_rgba(0,0,0,0.25)] transition cursor-pointer"
             >
-              <Lock className="w-4 h-4" />
+              <UserPlus className="w-4 h-4" strokeWidth={1.8} />
+              <span>Nuevo paciente</span>
             </button>
+          )}
 
+          {canInstallPwa && (
             <button
-              onClick={onSignOut}
-              title="Cerrar sesión / Cambiar de usuario"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-800/80 text-xs font-semibold transition cursor-pointer"
+              type="button"
+              onClick={onInstallPwa}
+              title="Instalar la app en este equipo"
+              aria-label="Instalar la app en este equipo"
+              className="p-2 rounded-md text-[#e9dfcb] hover:text-white hover:bg-white/5 transition cursor-pointer"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Salir</span>
+              <Download className="w-5 h-5" strokeWidth={1.6} />
             </button>
-          </div>
+          )}
+
+          <button
+            type="button"
+            onClick={onLockScreen}
+            title="Bloquear pantalla (Ctrl + L)"
+            aria-label="Bloquear pantalla"
+            className="p-2 rounded-md text-[#e9dfcb] hover:text-white hover:bg-white/5 transition cursor-pointer"
+          >
+            <Lock className="w-5 h-5" strokeWidth={1.6} />
+          </button>
+
+          <button
+            type="button"
+            onClick={onSignOut}
+            title="Salir"
+            aria-label="Salir"
+            className="p-2 rounded-md text-[#e9dfcb] hover:text-white hover:bg-white/5 transition cursor-pointer"
+          >
+            <LogOut className="w-5 h-5" strokeWidth={1.6} />
+          </button>
         </div>
       </div>
     </header>

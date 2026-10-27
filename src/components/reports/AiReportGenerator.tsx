@@ -124,58 +124,54 @@ export const AiReportGenerator: React.FC<AiReportGeneratorProps> = ({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5 no-print">
+      <div className="lg:col-span-4 paper-sheet p-6 space-y-5 no-print">
         <div>
-          <div className="flex items-center space-x-2 text-teal-600 font-bold text-base mb-1">
-            <Sparkles className="w-5 h-5" />
-            <h3>Agente Terapéutico IA Seguro</h3>
-          </div>
-          <p className="text-xs text-slate-500">
-            Sintetiza evoluciones, actividades y regresiones. Los datos filiatorios del menor
-            se seudonimizan automáticamente (`&#123;&#123;PACIENTE&#125;&#125;`) y la API Key reside solo en
-            el servidor (Ley 25.326).
+          <h3 className="text-2xl text-slate-900 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-teal-700" strokeWidth={1.6} />
+            Armar un informe
+          </h3>
+          <p className="text-sm text-slate-600 mt-1">
+            Arma un borrador a partir de las actividades, evoluciones y regresiones cargadas.
+            Siempre lo revisás vos antes de guardarlo.
           </p>
         </div>
 
-        <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-lg space-y-1.5">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
-            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Privacidad por Diseño Activa</span>
-          </div>
-          <p className="text-[11px] text-emerald-700 leading-relaxed">
-            Ninguna clave de API se almacena en el navegador. Nombre, tutor, teléfono y DNI se
-            reemplazan antes de consultar el modelo.
+        <div className="border-l-4 border-emerald-500 bg-emerald-50 px-3 py-2.5 space-y-1">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-900">
+            <ShieldCheck className="w-4 h-4 shrink-0" strokeWidth={1.7} />
+            El nombre del paciente no sale de la app
+          </p>
+          <p className="text-xs text-emerald-800 leading-relaxed">
+            Nombre, tutor, teléfono y DNI se reemplazan antes de armar el informe.
           </p>
           {selectedStudent && (
             <button
               type="button"
               onClick={() => setShowAnonymizedPreview((v) => !v)}
-              className="text-[11px] font-semibold text-emerald-900 underline"
+              className="text-xs font-semibold text-emerald-900 underline cursor-pointer"
             >
-              {showAnonymizedPreview
-                ? 'Ocultar payload seudonimizado'
-                : 'Ver qué datos seudonimizados se envían'}
+              {showAnonymizedPreview ? 'Ocultar lo que se envía' : 'Ver lo que se envía'}
             </button>
           )}
         </div>
 
         {showAnonymizedPreview && selectedStudent && (
-          <div className="bg-slate-900 text-slate-200 p-3 rounded-lg text-[10px] font-mono max-h-36 overflow-y-auto whitespace-pre-wrap">
+          <div className="bg-slate-900 text-slate-200 p-3 rounded-[3px] text-[10px] font-mono max-h-36 overflow-y-auto whitespace-pre-wrap">
             {anonymizedPreviewText || 'Sin entradas clínicas para seudonimizar.'}
           </div>
         )}
 
         <div>
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            1. Seleccionar Paciente
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            Paciente
           </label>
           <select
             value={selectedStudentId || ''}
             onChange={(e) => onSelectStudent(e.target.value)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+            className="w-full text-sm px-2.5 py-2 bg-[#fffdf7] border border-slate-300 rounded-[3px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20"
           >
             <option value="" disabled>
-              -- Selecciona un paciente --
+              Elegí un paciente
             </option>
             {activeStudents.map((s) => (
               <option key={s.id} value={s.id}>
@@ -186,13 +182,13 @@ export const AiReportGenerator: React.FC<AiReportGeneratorProps> = ({
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            2. Tipo de Informe
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            Tipo de informe
           </label>
           <select
             value={aiReportType}
             onChange={(e) => setAiReportType(e.target.value)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+            className="w-full text-sm px-2.5 py-2 bg-[#fffdf7] border border-slate-300 rounded-[3px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20"
           >
             <option value="Informe de Evolución Mensual">
               Informe de Evolución Mensual (Clínico)
@@ -207,51 +203,49 @@ export const AiReportGenerator: React.FC<AiReportGeneratorProps> = ({
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            3. Período Evaluable
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            Período
           </label>
           <input
             type="text"
             value={aiPeriod}
             onChange={(e) => setAiPeriod(e.target.value)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
-            placeholder="Ej: Marzo 2026"
+            className="w-full text-sm px-2.5 py-2 bg-[#fffdf7] border border-slate-300 rounded-[3px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20"
+            placeholder="Por ejemplo, marzo 2026"
           />
         </div>
 
         <button
           onClick={handleGenerateAiReport}
           disabled={!selectedStudent || isAiLoading}
-          className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-lg shadow transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+          className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-[#f6eedd] font-semibold text-sm rounded-[3px] transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
         >
           {isAiLoading ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>Sintetizando Historial Seudonimizado...</span>
+              <span>Armando el borrador…</span>
             </>
           ) : (
             <>
               <Sparkles className="w-4 h-4" />
-              <span>Generar Borrador de Informe</span>
+              <span>Armar borrador</span>
             </>
           )}
         </button>
       </div>
 
-      <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col min-h-[600px] print-container">
+      <div className="lg:col-span-8 paper-sheet p-6 flex flex-col min-h-[600px] print-container">
         <div className="flex flex-wrap items-center justify-between pb-4 border-b border-slate-200 mb-4 gap-2 no-print">
           <div className="flex items-center space-x-2">
-            <FileText className="w-5 h-5 text-teal-600" />
-            <h3 className="font-bold text-slate-900 text-base">
-              Vista Previa y Validación Profesional
-            </h3>
+            <FileText className="w-5 h-5 text-slate-600" strokeWidth={1.6} />
+            <h3 className="text-2xl text-slate-900">Borrador</h3>
           </div>
 
           {aiGeneratedReport && (
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleCopyReport}
-                className="flex items-center space-x-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg font-medium"
+                className="flex items-center space-x-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-[3px] font-medium"
               >
                 <Copy className="w-3.5 h-3.5" />
                 <span>Copiar</span>
@@ -259,25 +253,25 @@ export const AiReportGenerator: React.FC<AiReportGeneratorProps> = ({
 
               <button
                 onClick={handleAttachToHistory}
-                className="flex items-center space-x-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-medium"
+                className="flex items-center space-x-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-[3px] font-medium"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>Firmar y Adjuntar a Historia Clínica</span>
+                <span>Guardar en la historia clínica</span>
               </button>
 
               <button
                 onClick={() => window.print()}
-                className="flex items-center space-x-1 text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-medium"
+                className="flex items-center space-x-1 text-xs bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-[3px] font-medium"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Imprimir / PDF</span>
+                <span>Imprimir o PDF</span>
               </button>
             </div>
           )}
         </div>
 
         {aiGeneratedReport && (
-          <label className="mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-center gap-2.5 text-xs text-amber-900 cursor-pointer no-print">
+          <label className="mb-3 p-3 rounded-[3px] bg-amber-50 border border-amber-200 flex items-center gap-2.5 text-xs text-amber-900 cursor-pointer no-print">
             <input
               type="checkbox"
               checked={reviewedByProfessional}
@@ -292,12 +286,12 @@ export const AiReportGenerator: React.FC<AiReportGeneratorProps> = ({
           </label>
         )}
 
-        <div className="flex-1 bg-slate-50 p-6 rounded-lg border border-slate-200 font-mono text-xs leading-relaxed text-slate-800 overflow-y-auto max-h-[600px] print-container">
+        <div className="flex-1 ruled-paper p-6 rounded-[3px] border border-slate-200 font-mono text-[13px] leading-7 text-slate-800 overflow-y-auto max-h-[600px] print-container">
           {isAiLoading ? (
             <div className="h-full flex flex-col items-center justify-center py-20 text-teal-600 space-y-3">
               <RefreshCw className="w-8 h-8 animate-spin" />
               <p className="font-sans font-medium text-sm">
-                Analizando asientos clínicos seudonimizados...
+                Armando el borrador…
               </p>
             </div>
           ) : aiGeneratedReport ? (
@@ -325,11 +319,10 @@ export const AiReportGenerator: React.FC<AiReportGeneratorProps> = ({
             <div className="h-full flex flex-col items-center justify-center py-20 text-slate-400 font-sans text-center">
               <Brain className="w-12 h-12 text-slate-300 mb-2" />
               <p className="font-semibold text-slate-600 text-sm">
-                Ningún informe generado aún
+                Todavía no hay borrador
               </p>
-              <p className="text-xs text-slate-400 mt-1 max-w-md">
-                Selecciona un paciente a la izquierda y presiona &quot;Generar Borrador de
-                Informe&quot;.
+              <p className="text-sm text-slate-500 mt-1 max-w-md">
+                Elegí el paciente y el período, y tocá &quot;Armar borrador&quot;.
               </p>
             </div>
           )}

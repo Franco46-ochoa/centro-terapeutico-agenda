@@ -2,7 +2,6 @@ import React from 'react';
 import { Search, ChevronRight, Lock, Archive } from 'lucide-react';
 import {
   getStudentAgeLabel,
-  getConditionColor,
   type AppRole,
   type StudentPatient,
 } from '../../types/clinical';
@@ -40,93 +39,88 @@ export const PatientDirectory: React.FC<PatientDirectoryProps> = ({
   });
 
   return (
-    <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col h-[520px] lg:h-[750px]">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-slate-900 text-base">Pacientes Registrados</h3>
-        <span className="text-xs bg-slate-100 text-slate-600 font-bold px-2.5 py-1 rounded-full">
-          Total: {filtered.length}
-        </span>
+    <div className="lg:col-span-1 paper-sheet p-4 flex flex-col h-[520px] lg:h-[750px]">
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="text-xl text-slate-900">Mis pacientes</h3>
+        <span className="text-sm text-slate-500">{filtered.length}</span>
       </div>
 
       <div className="relative mb-3">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
         <input
-          type="text"
-          placeholder={
-            canViewClinical
-              ? 'Buscar paciente, tutor o diagnóstico...'
-              : 'Buscar paciente o tutor...'
-          }
+          type="search"
+          aria-label="Buscar paciente"
+          placeholder={canViewClinical ? 'Buscar por nombre, tutor o diagnóstico' : 'Buscar por nombre o tutor'}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-teal-500 outline-none"
+          className="w-full pl-9 pr-3 py-2 bg-[#fffdf7] border border-slate-300 rounded-[3px] text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20"
         />
       </div>
 
       {currentRole === 'admin' && (
-        <label className="flex items-center gap-2 text-xs text-slate-500 mb-3 cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-slate-600 mb-3 cursor-pointer">
           <input
             type="checkbox"
             checked={showArchived}
             onChange={(e) => onToggleShowArchived(e.target.checked)}
-            className="rounded text-teal-600 focus:ring-teal-500"
+            className="accent-teal-700"
           />
-          <Archive className="w-3.5 h-3.5 text-slate-400" />
-          <span>Mostrar legajos archivados (Ley 26.529)</span>
+          <Archive className="w-4 h-4 text-slate-500" />
+          Mostrar legajos archivados
         </label>
       )}
 
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-        {filtered.map((student) => (
-          <div
-            key={student.id}
-            onClick={() => onSelectStudent(student.id)}
-            className={`p-3 rounded-lg border transition-all cursor-pointer flex items-center justify-between ${
-              selectedStudentId === student.id
-                ? 'bg-teal-50 border-teal-300 ring-2 ring-teal-200'
-                : student.archivedAt
-                  ? 'bg-slate-100/80 border-slate-200 opacity-75'
-                  : 'bg-white border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            <div className="space-y-1 min-w-0">
-              <div className="flex items-center space-x-2 flex-wrap">
-                <span className="font-bold text-sm text-slate-900 truncate">
-                  {student.name}
+      <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 pt-1">
+        {filtered.length === 0 && (
+          <p className="text-sm text-slate-500 py-6 text-center">
+            {searchQuery
+              ? 'Ningún paciente coincide con la búsqueda.'
+              : 'Todavía no hay pacientes. Usá "Nuevo paciente" para cargar el primero.'}
+          </p>
+        )}
+        {filtered.map((student) => {
+          const selected = selectedStudentId === student.id;
+          return (
+            <button
+              type="button"
+              key={student.id}
+              onClick={() => onSelectStudent(student.id)}
+              aria-current={selected ? 'true' : undefined}
+              className={`slip-card w-full text-left p-3 flex items-center justify-between gap-2 transition cursor-pointer ${
+                selected
+                  ? 'border-l-4 border-l-teal-700 bg-[#fffaf0]'
+                  : student.archivedAt
+                    ? 'opacity-70'
+                    : 'hover:bg-[#fffaf0]'
+              }`}
+            >
+              <span className="min-w-0 space-y-1">
+                <span className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-[15px] text-slate-900 truncate">
+                    {student.name}
+                  </span>
+                  {student.archivedAt && (
+                    <span className="stamp-pill text-slate-500">archivado</span>
+                  )}
+                  {student.absences >= 3 && !student.archivedAt && (
+                    <span className="stamp-pill text-rose-600">{student.absences} faltas</span>
+                  )}
                 </span>
-                {student.archivedAt && (
-                  <span className="bg-slate-200 text-slate-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                    Archivado
-                  </span>
-                )}
-                {student.absences >= 3 && !student.archivedAt && (
-                  <span className="bg-rose-100 text-rose-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded">
-                    {student.absences} Faltas
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-slate-500 truncate">
-                {getStudentAgeLabel(student)} • Tutor: {student.tutorName}
-              </div>
-              <div className="text-[11px]">
+                <span className="block text-xs text-slate-600 truncate">
+                  {getStudentAgeLabel(student)}, tutor: {student.tutorName}
+                </span>
                 {canViewClinical ? (
-                  <span
-                    className={`inline-block px-2 py-0.5 rounded border text-[10px] font-medium ${getConditionColor(
-                      student.condition
-                    )}`}
-                  >
-                    {student.condition}
-                  </span>
+                  <span className="tape-tag text-[11px]">{student.condition}</span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] bg-slate-100 text-slate-600 border-slate-200">
-                    <Lock className="w-2.5 h-2.5" /> Diagnóstico reservado
+                  <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                    <Lock className="w-3 h-3" /> Diagnóstico reservado
                   </span>
                 )}
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-          </div>
-        ))}
+              </span>
+              <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+            </button>
+          );
+        })}
       </div>
     </div>
   );

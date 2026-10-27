@@ -30,56 +30,57 @@ export const IdleLockOverlay: React.FC<IdleLockOverlayProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-4 no-print">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
-        <div className="w-12 h-12 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center mx-auto">
-          <Lock className="w-6 h-6" />
-        </div>
+    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
+      <div className="max-w-sm w-full paper-shadow">
+        <div className="paper-sheet torn-bottom px-6 pt-6 pb-10 space-y-4 text-center">
+          <Lock className="w-7 h-7 mx-auto text-slate-700" strokeWidth={1.5} />
 
-        <div>
-          <h3 className="text-base font-bold text-slate-900">
-            Sesión Bloqueada por Seguridad
-          </h3>
-          <p className="text-xs text-slate-500 mt-1">
-            Ingrese la contraseña de su perfil para reanudar o cambie de usuario.
-          </p>
-          <p className="text-xs font-semibold text-teal-700 mt-1">{userName}</p>
-        </div>
-
-        {error && (
-          <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-center gap-1.5">
-            <ShieldAlert className="w-4 h-4 shrink-0" />
-            <span>Contraseña incorrecta para el perfil activo.</span>
+          <div>
+            <h3 className="text-2xl text-slate-900">Pantalla bloqueada</h3>
+            <p className="text-sm text-slate-600 mt-1">
+              Escribí tu contraseña para seguir.
+            </p>
+            <p className="text-sm font-semibold text-slate-800 mt-1">{userName}</p>
           </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <input
-            type="password"
-            autoFocus
-            placeholder="Contraseña de su rol activo..."
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full text-center text-sm p-3 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
-          />
-          <button
-            type="submit"
-            className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
-          >
-            Desbloquear Pantalla
-          </button>
-        </form>
+          {error && (
+            <div
+              role="alert"
+              className="px-3 py-2 border-l-4 border-rose-500 bg-rose-50 text-rose-800 text-sm flex items-center gap-2 text-left"
+            >
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              <span>La contraseña no es correcta.</span>
+            </div>
+          )}
 
-        {onSwitchUser && (
-          <button
-            type="button"
-            onClick={onSwitchUser}
-            className="w-full py-2 text-xs text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 pt-2 border-t border-slate-100 cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Cerrar sesión y volver a la pantalla de inicio</span>
-          </button>
-        )}
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input
+              type="password"
+              autoFocus
+              aria-label="Contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full text-center text-[15px] px-3 py-2.5 bg-[#fffdf7] border border-slate-300 rounded-[3px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20"
+            />
+            <button
+              type="submit"
+              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-[#f6eedd] text-[15px] font-semibold rounded-[3px] transition cursor-pointer"
+            >
+              Desbloquear
+            </button>
+          </form>
+
+          {onSwitchUser && (
+            <button
+              type="button"
+              onClick={onSwitchUser}
+              className="w-full pt-3 text-sm text-slate-600 hover:text-slate-900 flex items-center justify-center gap-1.5 border-t border-dashed border-slate-300 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" strokeWidth={1.7} />
+              Salir y entrar con otro usuario
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

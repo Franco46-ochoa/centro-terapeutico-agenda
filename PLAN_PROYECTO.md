@@ -14,6 +14,7 @@
 - [x] **Fase 4:** IA Segura (Edge Function de Gemini con Seudonimización de PII) e Impresión Legal (`@media print`).
 - [x] **Fase 5:** Cifrado Local con WebCrypto (`AES-GCM` 256 bits) y Exportación/Importación de Backups Cifrados (`.enc.json`).
 - [x] **Fase 6:** Empaquetado como Programa de PC (PWA Instalable + Electron Endurecido), App Móvil y Despliegue Seguro en Vercel (`vercel.json`).
+- [x] **Fase 7 (diseño):** Estilo "agenda de papel" en todas las pantallas (papel, kraft y tinta; Cormorant Garamond + Nunito Sans autoalojadas), logo de electrocardiograma, campanita de avisos y estado de la nube funcionales.
 
 ---
 

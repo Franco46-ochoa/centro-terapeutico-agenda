@@ -1,14 +1,7 @@
 import React, { useState } from 'react';
-import {
-  Activity,
-  Lock,
-  Eye,
-  EyeOff,
-  AlertCircle,
-  User,
-  KeyRound,
-} from 'lucide-react';
+import { Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import type { LoginResult } from '../../hooks/useAuth';
+import { EcgLogo } from '../ui/EcgLogo';
 
 interface LoginViewProps {
   initialUserName: string;
@@ -37,112 +30,104 @@ export const LoginView: React.FC<LoginViewProps> = ({
     setPassword('');
   };
 
+  const inputClass =
+    'w-full text-[15px] px-3 py-2.5 bg-[#fffdf7] border border-slate-300 rounded-[3px] outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 transition text-slate-900 placeholder:text-slate-400';
+
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col justify-between p-4 sm:p-6 font-sans">
+    <div className="min-h-screen bg-kraft flex flex-col p-4 sm:p-6">
       <div className="flex-1 flex items-center justify-center">
-        <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6">
-          {/* Encabezado */}
-          <div className="flex items-center gap-3.5 border-b border-slate-100 pb-4">
-            <div className="p-3 bg-teal-500 text-slate-900 rounded-xl shadow-sm shrink-0">
-              <Activity className="w-7 h-7" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                Agenda Clínica Personal
-              </h1>
-              <p className="text-xs text-slate-500">
-                Ingrese su Nombre y Apellido y su contraseña personal
-              </p>
-            </div>
-          </div>
-
-          {error && (
-            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2 font-medium">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Formulario de Ingreso Directo por Nombre y Contraseña */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-teal-600" />
-                <span>Nombre y Apellido</span>
-              </label>
-              <input
-                type="text"
-                required
-                autoComplete="username"
-                autoFocus={!initialUserName}
-                value={userName}
-                onChange={(e) => {
-                  setUserName(e.target.value);
-                  setError(null);
-                }}
-                placeholder="Escriba su nombre y apellido..."
-                className="w-full text-sm p-3 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition text-slate-800 font-medium"
-              />
+        <div className="w-full max-w-md paper-shadow">
+          <div className="paper-sheet torn-bottom paper-curl px-7 sm:px-9 pt-8 pb-12">
+            <div className="flex flex-col items-center text-center gap-1 mb-7">
+              <EcgLogo className="w-24 h-12 text-teal-700" />
+              <h1 className="brand-wordmark text-3xl text-slate-900">Centro Terapéutico</h1>
+              <p className="text-sm text-slate-600">Ingresá con tu nombre y tu contraseña.</p>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-teal-600" />
-                <span>Contraseña</span>
-              </label>
-              <div className="relative">
+            {error && (
+              <div
+                role="alert"
+                className="mb-5 px-3 py-2.5 border-l-4 border-rose-500 bg-rose-50 text-sm text-rose-800 flex gap-2"
+              >
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="login-name" className="block text-sm font-semibold text-slate-800 mb-1">
+                  Nombre y apellido
+                </label>
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  id="login-name"
+                  type="text"
                   required
-                  autoComplete="current-password"
-                  autoFocus={Boolean(initialUserName)}
-                  value={password}
+                  autoComplete="username"
+                  autoFocus={!initialUserName}
+                  value={userName}
                   onChange={(e) => {
-                    setPassword(e.target.value);
+                    setUserName(e.target.value);
                     setError(null);
                   }}
-                  placeholder="Ingrese su contraseña..."
-                  className="w-full text-sm p-3 pr-10 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition"
+                  placeholder="Por ejemplo, Emilce Vilca"
+                  className={inputClass}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  tabIndex={-1}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
               </div>
-            </div>
 
-            {/* Recordar Usuario y Sesión */}
-            <label className="flex items-center gap-2.5 text-xs text-slate-600 cursor-pointer select-none pt-1">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300 cursor-pointer"
-              />
-              <span>Recordar mi usuario y mantener sesión iniciada en este equipo</span>
-            </label>
+              <div>
+                <label htmlFor="login-pass" className="block text-sm font-semibold text-slate-800 mb-1">
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <input
+                    id="login-pass"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="current-password"
+                    autoFocus={Boolean(initialUserName)}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError(null);
+                    }}
+                    className={`${inputClass} pr-10`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
 
-            <button
-              type="submit"
-              className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Lock className="w-4 h-4" />
-              <span>Ingresar a Mi Agenda</span>
-            </button>
-          </form>
+              <label className="flex items-start gap-2.5 text-sm text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-teal-700 cursor-pointer"
+                />
+                <span>Recordarme en este equipo</span>
+              </label>
+
+              <button
+                type="submit"
+                className="w-full mt-2 py-2.5 bg-slate-900 hover:bg-slate-800 text-[#f6eedd] text-[15px] font-semibold rounded-[3px] shadow-[0_2px_0_rgba(0,0,0,0.25)] transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Lock className="w-4 h-4" strokeWidth={1.8} />
+                Ingresar
+              </button>
+            </form>
+          </div>
         </div>
       </div>
 
-      <p className="text-center text-xs text-slate-500 mt-4">
-        Acceso Privado • Protección de Datos Clínicos Ley 25.326 y Ley 26.529
+      <p className="text-center text-xs text-[#5b4a35] mt-6">
+        Datos clínicos protegidos según las leyes 25.326 y 26.529.
       </p>
     </div>
   );
