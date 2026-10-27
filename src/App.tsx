@@ -5,6 +5,7 @@ import {
   DAYS_OF_WEEK,
   INITIAL_STUDENTS,
   getStudentSlots,
+  type AgeUnit,
   type AppRole,
   type AuditLogItem,
   type ClinicalEntryType,
@@ -308,6 +309,7 @@ export default function App() {
   const [newStudent, setNewStudent] = useState({
     name: '',
     age: '',
+    ageUnit: 'meses' as AgeUnit,
     condition: CONDITIONS[0].label as string,
     tutorName: '',
     phone: '',
@@ -603,6 +605,7 @@ export default function App() {
     const parsed = NewStudentSchema.safeParse({
       name: newStudent.name,
       age: newStudent.age,
+      ageUnit: newStudent.ageUnit,
       condition: newStudent.condition,
       tutorName: newStudent.tutorName,
       phone: newStudent.phone,
@@ -636,6 +639,7 @@ export default function App() {
       id: 'p_' + Date.now(),
       name: valid.name,
       age: valid.age,
+      ageUnit: valid.ageUnit,
       condition: valid.condition,
       tutorName: valid.tutorName,
       phone: valid.phone,
@@ -662,6 +666,7 @@ export default function App() {
     setNewStudent({
       name: '',
       age: '',
+      ageUnit: 'meses',
       condition: CONDITIONS[0].label,
       tutorName: '',
       phone: '',
@@ -1169,20 +1174,35 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Edad (años)
+                    Edad
                   </label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    max={99}
-                    placeholder="Ej: 8"
-                    value={newStudent.age}
-                    onChange={(e) =>
-                      setNewStudent({ ...newStudent, age: e.target.value })
-                    }
-                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
-                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      required
+                      min={newStudent.ageUnit === 'meses' ? 1 : 0}
+                      max={newStudent.ageUnit === 'meses' ? 36 : 99}
+                      placeholder={newStudent.ageUnit === 'meses' ? 'Ej: 3' : 'Ej: 8'}
+                      value={newStudent.age}
+                      onChange={(e) =>
+                        setNewStudent({ ...newStudent, age: e.target.value })
+                      }
+                      className="w-full min-w-0 text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                    <select
+                      value={newStudent.ageUnit}
+                      onChange={(e) =>
+                        setNewStudent({
+                          ...newStudent,
+                          ageUnit: e.target.value as AgeUnit,
+                        })
+                      }
+                      className="text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+                    >
+                      <option value="meses">Meses</option>
+                      <option value="años">Años</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>

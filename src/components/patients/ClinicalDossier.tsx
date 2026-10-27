@@ -18,6 +18,7 @@ import {
   FileText,
 } from 'lucide-react';
 import {
+  formatAge,
   getConditionColor,
   getStudentSlots,
   type AppRole,
@@ -165,7 +166,7 @@ export const ClinicalDossier: React.FC<ClinicalDossierProps> = ({
             </div>
 
             <p className="text-sm text-slate-500">
-              {student.age} años • Tutor Responsable: {student.tutorName} ({student.phone})
+              {formatAge(student.age, student.ageUnit)} • Tutor Responsable: {student.tutorName} ({student.phone})
             </p>
 
             {/* LISTA DE TURNOS SEMANALES DEL PACIENTE */}

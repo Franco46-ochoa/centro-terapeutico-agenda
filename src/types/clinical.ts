@@ -10,6 +10,14 @@ export type AttendanceEventType =
   | 'ausente_justificado'
   | 'reinicio_ciclo';
 
+export type AgeUnit = 'meses' | 'años';
+
+/** Devuelve la edad formateada, ej: "1 mes", "8 meses", "1 año", "7 años". */
+export function formatAge(age: number, unit: AgeUnit = 'años'): string {
+  if (unit === 'meses') return `${age} ${age === 1 ? 'mes' : 'meses'}`;
+  return `${age} ${age === 1 ? 'año' : 'años'}`;
+}
+
 export interface TimeSlotAssignment {
   day: DayOfWeek;
   hour: string;
@@ -43,6 +51,7 @@ export interface StudentPatient {
   id: string;
   name: string;
   age: number;
+  ageUnit?: AgeUnit;
   condition: string;
   tutorName: string;
   phone: string;
